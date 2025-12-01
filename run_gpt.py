@@ -24,7 +24,9 @@ def main():
 
     # Checkpoint directory
     ckpt_dir = os.path.join(os.getcwd(), "checkpoints", "gpt_listops")
+    best_dir = os.path.join(ckpt_dir, "best")
     os.makedirs(ckpt_dir, exist_ok=True)
+    os.makedirs(best_dir, exist_ok=True)
 
     logger.info(f"Starting Generative Training (SpectralGPT) on: {config.data.task_name}")
     logger.info(f"Checkpoint Dir: {ckpt_dir}")
@@ -125,11 +127,15 @@ def main():
                 f"Val Loss: {float(mean_loss):.4f} | Val Acc: {val_acc:.4f}"
             )
             
-            # Save best checkpoint
+            # Save Latest Checkpoint (For resuming)
+            checkpoints.save_checkpoint(ckpt_dir=ckpt_dir, target=state, step=step, keep=1, overwrite=True)
+            logger.info(f"Checkpoint Saved (Step: {step})")
+            
+            # Save Best Checkpoint (For performance)
             if val_acc > best_acc:
                 best_acc = val_acc
-                checkpoints.save_checkpoint(ckpt_dir=ckpt_dir, target=state, step=step, keep=1, overwrite=True)
-                logger.info(f"New Best Accuracy: {best_acc:.4f} - Checkpoint Saved")
+                checkpoints.save_checkpoint(ckpt_dir=best_dir, target=state, step=step, keep=1, overwrite=True)
+                logger.info(f"New Best Accuracy: {best_acc:.4f} - Best Checkpoint Saved")
 
     logger.info(f"Training complete. Best Validation Accuracy: {best_acc:.4f}")
 

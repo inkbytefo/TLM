@@ -13,39 +13,28 @@ class HyenaBlock(nn.Module):
     hidden_dim: int
     filter_order: int = 64 # Length of the learnable filter (can be shorter than seq_len)
     dropout_rate: float = 0.1
+    max_len: int = 2048 # Maximum sequence length for filter
     
     @nn.compact
     def __call__(self, x, train: bool = True):
         # x: (Batch, Length, Hidden)
         seq_len = x.shape[1]
         
-        # 1. Projections (Q, K, V equivalent)
-        # In Hyena/H3, we typically have 3 projections.
-        # Let's call them x_proj (input), v_proj (value), and gate_proj.
-        # For simplicity, we'll follow a standard structure:
-        # u = x_proj(x)
-        # v = v_proj(x)
-        # y = h * (u * v)  <-- This is a simplification of the full Hyena hierarchy
-        
-        # Let's implement a standard "Gated Convolution" block
+        # 1. Projections
         u = nn.Dense(self.hidden_dim)(x)
         v = nn.Dense(self.hidden_dim)(x)
         
         # 2. Learnable Filter 'h'
-        # We need a filter of length 'seq_len'. 
-        # Ideally, this is generated from a positional embedding or a small MLP.
-        # For this MVP, we will learn a direct parameter and interpolate/pad if needed.
-        # Or better: Learn a filter of size 'seq_len' directly (simple but fixed length).
+        # We initialize with max_len to handle variable lengths
+        h_param = self.param('h_filter', nn.initializers.normal(stddev=0.02), (self.max_len, self.hidden_dim))
         
-        # To support variable length, we usually use a small MLP on positional embeddings.
-        # Let's use a simple learnable parameter for now, assuming fixed max_len or padding.
-        # h_param: (Length, Hidden)
-        h_param = self.param('h_filter', nn.initializers.normal(stddev=0.02), (seq_len, self.hidden_dim))
+        # Slice to current sequence length
+        h = h_param[:seq_len, :]
         
-        # Apply exponential decay window to enforce locality/stability (optional but good)
+        # Apply exponential decay window to enforce locality/stability
         t = jnp.arange(seq_len)
         decay = jnp.exp(-0.01 * t)[:, None]
-        h = h_param * decay
+        h = h * decay
         
         # 3. Causal Convolution
         # y = h * v (Convolution)

@@ -8,6 +8,11 @@ import os
 from flax.training import checkpoints
 from config import Config
 from src.utils.common import setup_logger, set_seed
+
+# Prevent TensorFlow from grabbing GPU memory (JAX needs it)
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
+
 from src.data.lra import get_lra_dataloader
 from src.training.trainer import create_generative_train_state, train_step_generative
 from src.training.evaluator import eval_step_generative

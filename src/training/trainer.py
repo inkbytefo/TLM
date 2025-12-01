@@ -82,7 +82,7 @@ def train_step(state, batch, rng):
     avg_acc = jnp.mean(accuracies)
     
     # Grads bir PyTree, yaprakların ortalamasını almalıyız
-    avg_grads = jax.tree_map(lambda x: jnp.mean(x, axis=0), grads)
+    avg_grads = jax.tree.map(lambda x: jnp.mean(x, axis=0), grads)
     
     state = state.apply_gradients(grads=avg_grads)
     

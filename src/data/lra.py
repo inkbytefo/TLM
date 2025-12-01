@@ -80,25 +80,41 @@ def get_lra_dataloader(split, seq_len, batch_size, task_name=None, repeat=False)
     print(f"Loading and tokenizing {split} data (Byte-Level)...")
     
     with open(file_path, 'r', encoding='utf-8') as f:
-        first_line = True
+        # Header parsing
+        header_line = f.readline().strip()
+        headers = header_line.split('\t')
+        
+        source_idx = 0
+        target_idx = 1
+        
+        if "Source" in headers and "Target" in headers:
+            source_idx = headers.index("Source")
+            target_idx = headers.index("Target")
+            print(f"Detected columns: Source at {source_idx}, Target at {target_idx}")
+        else:
+            print(f"Header not found or unrecognized: {header_line}. Assuming Source at 0, Target at 1.")
+            # Reset file pointer if no header (unlikely for LRA but good safety)
+            # But readline() consumed it. If it wasn't a header, we lost data.
+            # LRA files usually have headers. Let's assume standard format if header missing.
+            if "Source" not in header_line:
+                 # If the first line doesn't look like a header, maybe it's data?
+                 # But we already consumed it. Re-opening or seeking is better.
+                 f.seek(0)
+        
         for line in f:
-            if first_line:
-                if "Source" in line:
-                    first_line = False
-                    continue
-                first_line = False
-            
             parts = line.strip().split('\t')
             if len(parts) < 2:
                 continue
                 
             try:
-                label = int(parts[0])
-                text = parts[1]
+                # Parse based on detected or default indices
+                text = parts[source_idx]
+                label = int(parts[target_idx])
+                
                 tokenized_text = tokenize(text, seq_len)
                 texts.append(tokenized_text)
                 labels.append(label)
-            except ValueError:
+            except (ValueError, IndexError):
                 continue
                 
     X = np.array(texts, dtype=np.uint8)
@@ -106,6 +122,9 @@ def get_lra_dataloader(split, seq_len, batch_size, task_name=None, repeat=False)
     
     print(f"{split} data loaded. Shape: {X.shape}")
     
+    if len(X) == 0:
+        raise ValueError(f"No data loaded for {split}. Check file format.")
+
     # tf.data.Dataset oluştur
     dataset = tf.data.Dataset.from_tensor_slices({'input': X, 'label': y})
     
@@ -119,4 +138,4 @@ def get_lra_dataloader(split, seq_len, batch_size, task_name=None, repeat=False)
     
     # Numpy Iterator'a çevir
     import tensorflow_datasets as tfds
-    return tfds.as_numpy(dataset)
+    return iter(tfds.as_numpy(dataset))

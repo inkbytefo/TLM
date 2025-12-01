@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from flax.training import train_state
 import optax
+import functools
 from src.models.model import SpectralModel
 
 def create_train_state(rng, config):
@@ -33,7 +34,7 @@ def create_train_state(rng, config):
         apply_fn=model.apply, params=params, tx=tx
     )
 
-@jax.jit
+@functools.partial(jax.jit, static_argnames=('label_smoothing',))
 def train_step(state, batch, rng, label_smoothing=0.0):
     """
     Gradient Accumulation + Label Smoothing destekli train step.

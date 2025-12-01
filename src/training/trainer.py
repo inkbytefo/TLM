@@ -4,6 +4,7 @@ from flax.training import train_state
 import optax
 import functools
 from src.models.model import SpectralModel
+from src.models.gpt import SpectralGPT
 
 def create_train_state(rng, config):
     model = SpectralModel(
@@ -16,6 +17,37 @@ def create_train_state(rng, config):
     
     # Dummy input shape: (1, SeqLen)
     dummy_input = jnp.ones((1, config.data.seq_len), dtype=jnp.int32)
+    params = model.init(rng, dummy_input, train=False)['params']
+    
+    schedule = optax.warmup_cosine_decay_schedule(
+        init_value=1e-5,
+        peak_value=config.training.learning_rate,
+        warmup_steps=config.training.warmup_steps,
+        decay_steps=config.training.num_steps
+    )
+    
+    tx = optax.chain(
+        optax.clip_by_global_norm(1.0),
+        optax.adamw(learning_rate=schedule, weight_decay=config.training.weight_decay)
+    )
+    
+    return train_state.TrainState.create(
+        apply_fn=model.apply, params=params, tx=tx
+    )
+
+def create_generative_train_state(rng, config):
+    """
+    Creates TrainState for SpectralGPT (Generative).
+    """
+    model = SpectralGPT(
+        vocab_size=config.model.vocab_size,
+        hidden_dim=config.model.hidden_dim,
+        num_layers=config.model.num_layers,
+        dropout_rate=config.model.dropout_rate
+    )
+    
+    # Dummy input: (1, SeqLen)
+    dummy_input = jnp.zeros((1, config.data.seq_len), dtype=jnp.int32)
     params = model.init(rng, dummy_input, train=False)['params']
     
     schedule = optax.warmup_cosine_decay_schedule(
@@ -85,6 +117,69 @@ def train_step(state, batch, rng, label_smoothing=0.0):
     avg_acc = jnp.mean(accuracies)
     
     # Grads bir PyTree, yaprakların ortalamasını almalıyız
+    avg_grads = jax.tree.map(lambda x: jnp.mean(x, axis=0), grads)
+    
+    state = state.apply_gradients(grads=avg_grads)
+    new_rng = jax.random.fold_in(rng, state.step)
+    
+    return state, avg_loss, avg_acc, new_rng
+
+@functools.partial(jax.jit)
+def train_step_generative(state, batch, rng):
+    """
+    Train step for Next-Token Prediction (Generative).
+    Input: x[0...L-1]
+    Target: x[1...L]
+    """
+    accum_steps = batch['input'].shape[0]
+    dropout_rngs = jax.random.split(rng, accum_steps)
+    
+    def compute_loss(params, minibatch, dropout_rng):
+        # Prepare Inputs and Targets
+        # x: (Batch, L)
+        seq = minibatch['input']
+        
+        # Input: 0 to L-1
+        inputs = seq[:, :-1]
+        # Target: 1 to L
+        targets = seq[:, 1:]
+        
+        logits = state.apply_fn(
+            {'params': params}, 
+            inputs, 
+            train=True, 
+            rngs={'dropout': dropout_rng}
+        )
+        
+        # logits: (Batch, L-1, Vocab)
+        # targets: (Batch, L-1)
+        
+        loss = optax.softmax_cross_entropy_with_integer_labels(
+            logits=logits, labels=targets
+        ).mean()
+        
+        # Accuracy (Next Token Prediction Accuracy)
+        acc = jnp.mean(jnp.argmax(logits, -1) == targets)
+        
+        return loss, (logits, acc)
+
+    def scan_step(carry, x):
+        minibatch, dropout_rng = x
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        (loss, (logits, acc)), grads = grad_fn(state.params, minibatch, dropout_rng)
+        return carry, (loss, acc, grads)
+
+    scan_inputs = (batch, dropout_rngs)
+    
+    _, (losses, accuracies, grads) = jax.lax.scan(
+        scan_step, 
+        None,
+        scan_inputs
+    )
+    
+    avg_loss = jnp.mean(losses)
+    avg_acc = jnp.mean(accuracies)
+    
     avg_grads = jax.tree.map(lambda x: jnp.mean(x, axis=0), grads)
     
     state = state.apply_gradients(grads=avg_grads)

@@ -60,7 +60,7 @@ def tokenize(text, seq_len):
         
     return tokens
 
-def load_lra_dataset(split, seq_len, batch_size):
+def get_lra_dataloader(split, seq_len, batch_size, task_name=None, repeat=False):
     """LRA ListOps veri setini indirir ve yükler (Byte-Level)."""
     
     # Veri klasörünü oluştur
@@ -80,14 +80,9 @@ def load_lra_dataset(split, seq_len, batch_size):
     print(f"Loading and tokenizing {split} data (Byte-Level)...")
     
     with open(file_path, 'r', encoding='utf-8') as f:
-        # Başlık satırını atla (TSV formatında genelde başlık olur mu? LRA'da Source, Target var)
-        # LRA ListOps formatı: "Label \t Source" veya "Source \t Label" olabilir.
-        # Genellikle: Label \t Sequence
-        
         first_line = True
         for line in f:
             if first_line:
-                # Başlık kontrolü (opsiyonel, veri setine bağlı)
                 if "Source" in line:
                     first_line = False
                     continue
@@ -97,35 +92,31 @@ def load_lra_dataset(split, seq_len, batch_size):
             if len(parts) < 2:
                 continue
                 
-            # ListOps formatı: Label <tab> Sequence
-            # Örnek: 2 <tab> (MAX 2 3 )
             try:
                 label = int(parts[0])
                 text = parts[1]
-                
-                # Tokenize (Byte-Level)
                 tokenized_text = tokenize(text, seq_len)
-                
                 texts.append(tokenized_text)
                 labels.append(label)
             except ValueError:
-                continue # Hatalı satırları atla
+                continue
                 
-    # Numpy array'e çevir
-    X = np.array(texts, dtype=np.uint8) # (N, L) uint8
-    y = np.array(labels, dtype=np.int32) # (N,)
+    X = np.array(texts, dtype=np.uint8)
+    y = np.array(labels, dtype=np.int32)
     
     print(f"{split} data loaded. Shape: {X.shape}")
     
-    # tf.data.Dataset oluştur (Batching ve Shuffle için)
-    dataset = tf.data.Dataset.from_tensor_slices((X, y))
+    # tf.data.Dataset oluştur
+    dataset = tf.data.Dataset.from_tensor_slices({'input': X, 'label': y})
     
     if split == 'train':
         dataset = dataset.shuffle(buffer_size=10000)
         
+    if repeat:
+        dataset = dataset.repeat()
+        
     dataset = dataset.batch(batch_size, drop_remainder=True)
     
-    # JAX uyumluluğu için numpy iterator'a çevir (tf.data -> numpy)
-    # Not: tfds.as_numpy(dataset) de kullanılabilir ama manuel döngü daha güvenli olabilir.
-    
-    return dataset
+    # Numpy Iterator'a çevir
+    import tensorflow_datasets as tfds
+    return tfds.as_numpy(dataset)

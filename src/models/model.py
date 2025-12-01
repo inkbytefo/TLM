@@ -25,6 +25,7 @@ class SpectralModel(nn.Module):
     hidden_dim: int
     num_layers: int
     dropout_rate: float = 0.1
+    num_classes: int = None # If set, performs classification (pooling + dense)
 
     @nn.compact
     def __call__(self, x: jnp.ndarray, train: bool = True) -> jnp.ndarray:
@@ -38,6 +39,13 @@ class SpectralModel(nn.Module):
             x = SpectralLayer(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(x, train=train)
             
         x = nn.LayerNorm()(x)
-        logits = nn.Dense(self.vocab_size)(x)
+        
+        if self.num_classes is not None:
+            # Classification: Mean Pooling -> Dense(num_classes)
+            x = jnp.mean(x, axis=1)
+            logits = nn.Dense(self.num_classes)(x)
+        else:
+            # Seq2Seq: Dense(vocab_size) per token
+            logits = nn.Dense(self.vocab_size)(x)
         
         return logits

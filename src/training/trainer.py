@@ -11,7 +11,8 @@ def create_train_state(rng, config):
         vocab_size=config.model.vocab_size,
         hidden_dim=config.model.hidden_dim,
         num_layers=config.model.num_layers,
-        dropout_rate=config.model.dropout_rate
+        dropout_rate=config.model.dropout_rate,
+        num_classes=10 # ListOps has 10 classes (0-9)
     )
     
     dummy_input = jnp.ones((1, config.data.seq_len), dtype=jnp.int32)

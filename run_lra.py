@@ -57,18 +57,35 @@ def main():
         state, loss, acc, rng = train_step(state, batch, rng)
 
         if step % config.training.eval_every == 0:
-            val_np = next(val_loader)
-            val_batch = {
-                'input': jnp.array(val_np['input']),
-                'label': jnp.array(val_np['label']),
-            }
-            metrics = eval_step(state, val_batch)
-            val_acc = float(metrics['accuracy'])
+            # --- FULL VALIDATION LOOP (Stabilite için) ---
+            val_metrics = []
+            eval_steps = 50 # 50 * 16 = 800 örnek (Validation setinin büyük kısmı)
+            
+            for _ in range(eval_steps):
+                try:
+                    val_np = next(val_loader)
+                except StopIteration:
+                    # Eğer loader biterse (repeat=False ise), yeniden oluşturmak gerekebilir
+                    # Ancak run_lra.py'de repeat=True ayarlı, bu yüzden sorun olmaz.
+                    pass
+                    
+                val_batch = {
+                    'input': jnp.array(val_np['input']),
+                    'label': jnp.array(val_np['label']),
+                }
+                metrics = eval_step(state, val_batch)
+                val_metrics.append(metrics)
+            
+            # Ortalamaları al
+            mean_loss = jnp.mean(jnp.array([m['loss'] for m in val_metrics]))
+            mean_acc = jnp.mean(jnp.array([m['accuracy'] for m in val_metrics]))
+            
+            val_acc = float(mean_acc)
             
             logger.info(
                 f"Step: {step}/{config.training.num_steps} | "
                 f"Train Loss: {float(loss):.4f} | Train Acc: {float(acc):.4f} | "
-                f"Val Loss: {float(metrics['loss']):.4f} | Val Acc: {val_acc:.4f}"
+                f"Val Loss: {float(mean_loss):.4f} | Val Acc: {val_acc:.4f}"
             )
             
             # Save best checkpoint

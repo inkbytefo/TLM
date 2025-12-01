@@ -10,10 +10,10 @@ class DataConfig:
     batch_size = 16     # 32 -> 16 (OOM Fix)
 
 class TrainingConfig:
-    learning_rate = 4e-4 # 1e-3 -> 4e-4 (Stabilite için düşürüldü)
-    weight_decay = 0.01
-    warmup_steps = 1000
-    num_steps = 10000   # 5000 -> 10000 (Daha uzun eğitim)
+    learning_rate = 2e-4  # 4e-4 -> 2e-4 (Daha güvenli)
+    weight_decay = 0.05   # 0.01 -> 0.05 (Overfitting'i engellemek için artırıldı)
+    warmup_steps = 2000   # 1000 -> 2000 (Daha yavaş ısınma)
+    num_steps = 20000     # 10000 -> 20000 (Daha uzun eğitim)
     eval_every = 200    
     seed = 42
 

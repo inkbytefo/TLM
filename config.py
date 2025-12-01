@@ -7,7 +7,7 @@ class ModelConfig:
 class DataConfig:
     task_name = 'lra_listops'
     seq_len = 2048      # Byte-Level için artırıldı
-    batch_size = 32     
+    batch_size = 16     # 32 -> 16 (OOM Fix)
 
 class TrainingConfig:
     learning_rate = 4e-4 # 1e-3 -> 4e-4 (Stabilite için düşürüldü)

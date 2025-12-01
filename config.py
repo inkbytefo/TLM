@@ -1,12 +1,12 @@
 class ModelConfig:
-    vocab_size = 20     
+    vocab_size = 256    # Byte-Level (0-255)
     hidden_dim = 256    # 128 -> 256 (Kapasite artışı)
     num_layers = 6      # 4 -> 6 (Derinlik artışı)
     dropout_rate = 0.1
 
 class DataConfig:
     task_name = 'lra_listops'
-    seq_len = 2048      
+    seq_len = 2048      # Byte-Level için artırıldı
     batch_size = 32     
 
 class TrainingConfig:

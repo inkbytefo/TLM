@@ -19,33 +19,45 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 class SpectralModel(nn.Module):
     """
-    Full Spectral-JAX Model.
+    Full Spectral-JAX Model with Masked Pooling.
     """
     vocab_size: int
     hidden_dim: int
     num_layers: int
     dropout_rate: float = 0.1
-    num_classes: int = None # If set, performs classification (pooling + dense)
+    num_classes: int = None 
 
     @nn.compact
     def __call__(self, x: jnp.ndarray, train: bool = True) -> jnp.ndarray:
         # x: (batch, seq_len) indices
         
-        x = nn.Embed(num_embeddings=self.vocab_size, features=self.hidden_dim)(x)
-        x = SinusoidalPositionalEncoding(d_model=self.hidden_dim)(x)
-        x = nn.Dropout(rate=self.dropout_rate)(x, deterministic=not train)
+        # 1. Maskeyi oluştur (0 olmayanlar 1, padding 0)
+        mask = (x != 0).astype(jnp.float32)
+        mask = jnp.expand_dims(mask, axis=-1) # (B, L, 1)
         
+        x_emb = nn.Embed(num_embeddings=self.vocab_size, features=self.hidden_dim)(x)
+        x_emb = SinusoidalPositionalEncoding(d_model=self.hidden_dim)(x_emb)
+        x_emb = nn.Dropout(rate=self.dropout_rate)(x_emb, deterministic=not train)
+        
+        # Layer döngüsü
+        curr_x = x_emb
         for _ in range(self.num_layers):
-            x = SpectralLayer(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(x, train=train)
+            curr_x = SpectralLayer(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(curr_x, train=train)
             
-        x = nn.LayerNorm()(x)
+        curr_x = nn.LayerNorm()(curr_x)
         
         if self.num_classes is not None:
-            # Classification: Mean Pooling -> Dense(num_classes)
-            x = jnp.mean(x, axis=1)
-            logits = nn.Dense(self.num_classes)(x)
+            # --- KRİTİK DÜZELTME: MASKED MEAN POOLING ---
+            # Sadece gerçek tokenların ortalamasını al
+            # x * mask -> Paddingler 0 olur
+            # sum(x) / sum(mask) -> Sadece dolu token sayısına böl
+            
+            sum_embeddings = jnp.sum(curr_x * mask, axis=1)
+            sum_mask = jnp.sum(mask, axis=1) + 1e-9 # Sıfıra bölünmeyi önle
+            
+            pooled_x = sum_embeddings / sum_mask
+            logits = nn.Dense(self.num_classes)(pooled_x)
         else:
-            # Seq2Seq: Dense(vocab_size) per token
-            logits = nn.Dense(self.vocab_size)(x)
+            logits = nn.Dense(self.vocab_size)(curr_x)
         
         return logits

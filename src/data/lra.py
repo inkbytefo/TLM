@@ -7,9 +7,9 @@ from tqdm import tqdm
 
 # ListOps Veri Seti URL'leri
 LISTOPS_URLS = {
-    'train': 'https://storage.googleapis.com/long-range-arena/lra_release/lra_release/listops-1000/basic_train.tsv',
-    'validation': 'https://storage.googleapis.com/long-range-arena/lra_release/lra_release/listops-1000/basic_val.tsv',
-    'test': 'https://storage.googleapis.com/long-range-arena/lra_release/lra_release/listops-1000/basic_test.tsv'
+    'train': 'https://storage.googleapis.com/long-range-arena/lra_release/listops-1000/basic_train.tsv',
+    'validation': 'https://storage.googleapis.com/long-range-arena/lra_release/listops-1000/basic_val.tsv',
+    'test': 'https://storage.googleapis.com/long-range-arena/lra_release/listops-1000/basic_test.tsv'
 }
 
 # GÜNCELLENMİŞ VOCAB (Hata logundaki formata uygun)
@@ -23,11 +23,18 @@ VOCAB = {
 
 def download_file(url, dest_path):
     """Dosyayı indirir (Progress bar ile)."""
+    # Eğer dosya varsa ve boyutu çok küçükse (muhtemelen hata mesajı), sil
     if os.path.exists(dest_path):
-        return
+        if os.path.getsize(dest_path) < 1000:
+            print(f"File {dest_path} is too small (<1KB), deleting and redownloading...")
+            os.remove(dest_path)
+        else:
+            return
     
     print(f"Downloading {url} to {dest_path}...")
     response = requests.get(url, stream=True)
+    response.raise_for_status() # Hata durumunda (404, 403 vs) exception fırlat
+    
     total_size = int(response.headers.get('content-length', 0))
     
     with open(dest_path, 'wb') as file, tqdm(

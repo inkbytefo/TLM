@@ -28,7 +28,10 @@ def main():
 
     # Config'den accum_steps al, yoksa 1 varsay
     accum_steps = getattr(config.training, 'accum_steps', 1)
+    label_smoothing = getattr(config.training, 'label_smoothing', 0.0)
+    
     logger.info(f"Gradient Accumulation Steps: {accum_steps}")
+    logger.info(f"Label Smoothing: {label_smoothing}")
     logger.info(f"Micro Batch Size: {config.data.batch_size}")
     logger.info(f"Effective Batch Size: {config.data.batch_size * accum_steps}")
 
@@ -87,7 +90,12 @@ def main():
         }
         # -------------------------------------------
 
-        state, loss, acc, rng = train_step(state, batch, rng)
+        state, loss, acc, rng = train_step(
+            state, 
+            batch, 
+            rng, 
+            label_smoothing=label_smoothing
+        )
 
         if step % config.training.eval_every == 0:
             # --- FULL VALIDATION LOOP (Stabilite için) ---

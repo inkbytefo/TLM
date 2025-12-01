@@ -34,12 +34,10 @@ def create_train_state(rng, config):
     )
 
 @jax.jit
-def train_step(state, batch, rng):
+def train_step(state, batch, rng, label_smoothing=0.0):
     """
-    Gradient Accumulation destekli train step.
-    batch['input'] shape: (AccumSteps, MicroBatch, SeqLen)
+    Gradient Accumulation + Label Smoothing destekli train step.
     """
-    # Dropout key'ini accum_steps kadar çoğalt
     accum_steps = batch['input'].shape[0]
     dropout_rngs = jax.random.split(rng, accum_steps)
     
@@ -50,34 +48,38 @@ def train_step(state, batch, rng):
             train=True, 
             rngs={'dropout': dropout_rng}
         )
-        loss = optax.softmax_cross_entropy_with_integer_labels(
-            logits=logits, labels=minibatch['label']
-        ).mean()
         
-        # Accuracy hesabı (sadece loglama için)
+        # --- Label Smoothing ---
+        if label_smoothing > 0.0:
+            # One-hot encode
+            one_hot_labels = jax.nn.one_hot(minibatch['label'], num_classes=10)
+            # Smooth
+            soft_labels = (1.0 - label_smoothing) * one_hot_labels + (label_smoothing / 10.0)
+            
+            loss = optax.softmax_cross_entropy(logits=logits, labels=soft_labels).mean()
+        else:
+            loss = optax.softmax_cross_entropy_with_integer_labels(
+                logits=logits, labels=minibatch['label']
+            ).mean()
+        # -----------------------
+        
         acc = jnp.mean(jnp.argmax(logits, -1) == minibatch['label'])
         return loss, (logits, acc)
 
     def scan_step(carry, x):
-        # x: (minibatch, dropout_rng)
         minibatch, dropout_rng = x
         grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
         (loss, (logits, acc)), grads = grad_fn(state.params, minibatch, dropout_rng)
         return carry, (loss, acc, grads)
 
-    # Scan over accumulation steps
-    # batch'i (Accum, ...) formatında olduğu için doğrudan scan edebiliriz
-    # Ancak batch bir dict, onu scan uyumlu hale getirmeliyiz
-    scan_inputs = (batch, dropout_rngs) 
-    # Not: jax.lax.scan dict inputları otomatik parçalar (tree_map mantığı)
+    scan_inputs = (batch, dropout_rngs)
     
     _, (losses, accuracies, grads) = jax.lax.scan(
         scan_step, 
-        None, # carry yok
+        None,
         scan_inputs
     )
     
-    # Gradyanların ve metriklerin ortalamasını al
     avg_loss = jnp.mean(losses)
     avg_acc = jnp.mean(accuracies)
     
@@ -85,8 +87,6 @@ def train_step(state, batch, rng):
     avg_grads = jax.tree.map(lambda x: jnp.mean(x, axis=0), grads)
     
     state = state.apply_gradients(grads=avg_grads)
-    
-    # Yeni RNG döndür (sonuncusu değil, split edilmişlerden türetilen yeni bir tane)
     new_rng = jax.random.fold_in(rng, state.step)
     
     return state, avg_loss, avg_acc, new_rng

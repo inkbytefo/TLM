@@ -60,6 +60,11 @@ def load_listops_data(split, seq_len, data_dir='./data/lra_listops'):
     
     print(f"Processing {split} data...")
     with open(file_path, 'r') as f:
+        # Read first few lines for debugging
+        first_line = f.readline()
+        print(f"First line of {split}: {first_line.strip()}")
+        f.seek(0)
+        
         header = next(f) # Header'ı atla (Source \t Target)
         
         for line in f:
@@ -67,7 +72,7 @@ def load_listops_data(split, seq_len, data_dir='./data/lra_listops'):
             if len(parts) < 2: continue
             
             # DİNAMİK PARSING: Hangi sütunun label olduğunu anla
-            p0, p1 = parts[0], parts[1]
+            p0, p1 = parts[0].strip(), parts[1].strip()
             
             # Eğer p1 kısa ve sayıysa, format: Sequence \t Label (LRA standardı)
             if len(p1) < 5 and p1.isdigit():
@@ -83,6 +88,10 @@ def load_listops_data(split, seq_len, data_dir='./data/lra_listops'):
             
             inputs.append(tokenize(text, seq_len))
             targets.append(label)
+            
+    print(f"Loaded {len(inputs)} samples for {split}")
+    if len(inputs) == 0:
+        raise ValueError(f"No data loaded for {split}! Check TSV format.")
             
     return np.array(inputs, dtype=np.int32), np.array(targets, dtype=np.int32)
 

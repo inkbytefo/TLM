@@ -22,6 +22,12 @@ def main():
     logger.info(f"Starting LRA Task: {config.data.task_name}")
     logger.info(f"Checkpoint Dir: {ckpt_dir}")
 
+    # Config'den accum_steps al, yoksa 1 varsay
+    accum_steps = getattr(config.training, 'accum_steps', 1)
+    logger.info(f"Gradient Accumulation Steps: {accum_steps}")
+    logger.info(f"Micro Batch Size: {config.data.batch_size}")
+    logger.info(f"Effective Batch Size: {config.data.batch_size * accum_steps}")
+
     train_loader = get_lra_dataloader(
         task_name=config.data.task_name,
         batch_size=config.data.batch_size,
@@ -49,11 +55,34 @@ def main():
     best_acc = 0.0
     
     for step in range(start_step + 1, config.training.num_steps + 1):
-        batch_np = next(train_loader)
+        # --- BATCH HAZIRLAMA (Accumulation için) ---
+        inputs = []
+        labels = []
+        
+        for _ in range(accum_steps):
+            try:
+                batch_np = next(train_loader)
+            except StopIteration:
+                # Repeat=True olduğu için buraya düşmemeli ama güvenlik
+                train_loader = get_lra_dataloader(
+                    task_name=config.data.task_name,
+                    batch_size=config.data.batch_size,
+                    seq_len=config.data.seq_len,
+                    split='train',
+                    repeat=True,
+                )
+                batch_np = next(train_loader)
+                
+            inputs.append(batch_np['input'])
+            labels.append(batch_np['label'])
+            
+        # Stack: (Accum, MicroBatch, SeqLen)
         batch = {
-            'input': jnp.array(batch_np['input']),
-            'label': jnp.array(batch_np['label']),
+            'input': jnp.array(np.stack(inputs)),
+            'label': jnp.array(np.stack(labels)),
         }
+        # -------------------------------------------
+
         state, loss, acc, rng = train_step(state, batch, rng)
 
         if step % config.training.eval_every == 0:

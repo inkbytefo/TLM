@@ -69,8 +69,32 @@ class SinusoidalPositionalEncoding(nn.Module):
         pe = jnp.expand_dims(pe, axis=0) # (1, Length, Dim)
         return x + pe
 
+class AttentionPooling(nn.Module):
+    hidden_dim: int
+    
+    @nn.compact
+    def __call__(self, x, mask=None):
+        # x: (Batch, SeqLen, Hidden)
+        # mask: (Batch, SeqLen, 1)
+        
+        # Öğrenilebilir bir "Sorgu" vektörü (Query Vector)
+        attn_query = self.param('attn_query', nn.initializers.normal(0.02), (1, 1, self.hidden_dim))
+        
+        # Attention Skorları: (B, L, D) * (1, 1, D) -> (B, L, D) -> sum -> (B, L)
+        scores = jnp.sum(x * attn_query, axis=-1, keepdims=True) 
+        
+        if mask is not None:
+            # Maskelenmiş alanlara çok küçük değer ver (softmax'te 0 olsunlar)
+            scores = scores - 1e9 * (1.0 - mask)
+            
+        attn_weights = nn.softmax(scores, axis=1) # (B, L, 1)
+        
+        # Ağırlıklı Toplam
+        context = jnp.sum(x * attn_weights, axis=1) # (B, D)
+        return context
+
 class SpectralModel(nn.Module):
-    vocab_size: int # Artık kullanılmıyor ama config uyumluluğu için tutulabilir veya kaldırılabilir.
+    vocab_size: int 
     hidden_dim: int
     num_layers: int
     num_classes: int
@@ -81,12 +105,9 @@ class SpectralModel(nn.Module):
         # x: (Batch, L_original) -> uint8
         
         # --- 1. Byte-Level Patching Encoder ---
-        # Girdiyi sıkıştır: L -> L/4
         x_encoded = ByteLatentEncoder(hidden_dim=self.hidden_dim)(x)
-        # x_encoded shape: (Batch, L_compressed, Hidden)
         
         # --- 2. Positional Encoding ---
-        # Sıkıştırılmış uzunluk üzerinde çalışır
         x_emb = SinusoidalPositionalEncoding(d_model=self.hidden_dim)(x_encoded)
         x_emb = nn.Dropout(rate=self.dropout_rate)(x_emb, deterministic=not train)
         
@@ -99,51 +120,19 @@ class SpectralModel(nn.Module):
         
         # --- 4. Pooling & Classification ---
         if self.num_classes is not None:
-            # Maskeleme Mantığı Güncellemesi:
-            # Orijinal maske (B, L) boyutundaydı.
-            # Patching sonrası maske (B, L/4) olmalı.
-            # Basitçe: Orijinal x'te 0 olmayanlar 1'di.
-            # Patching işlemi (Conv stride=4) ile boyut düştü.
-            # Yeni maskeyi oluşturmak için:
-            # Orijinal maskeyi (B, L, 1) alıp Average Pooling (k=4, s=4) yapabiliriz.
-            # Veya daha basiti: Encoder çıkışındaki padding'i anlamak zor olabilir (Conv padding='VALID' vs).
-            # Alternatif: Encoder çıkışındaki tüm tokenları kullan (Global Average Pooling).
-            # Ancak padding tokenları (0) modelin kafasını karıştırabilir.
-            
-            # Pratik Çözüm:
-            # Orijinal maskeyi oluştur
+            # Maskeleme Mantığı
             mask_orig = (x != 0).astype(jnp.float32) # (B, L)
             mask_orig = jnp.expand_dims(mask_orig, axis=-1) # (B, L, 1)
             
-            # Maskeyi de aynı Conv işlemiyle (veya AvgPool) küçült
-            # Conv(kernel=6, stride=4, padding='VALID') benzeri bir işlem.
-            # Maske binary olduğu için, patch içinde EN AZ BİR dolu token varsa o patch dolu sayılmalı (Max Pooling).
-            # Veya patch'in ne kadarının dolu olduğu ağırlıklandırılmalı (Avg Pooling).
-            
-            # Avg Pooling yaklaşımı:
-            # Önce sol padding ekle (Encoder ile uyumlu olması için)
+            # Mask Downsampling (AvgPool ile)
             mask_padded = jnp.pad(mask_orig, ((0,0), (2,0), (0,0)))
-            
-            # Avg Pooling (Stride=4, Window=6 - Encoder ile tam eşleşmesi için Conv yerine AvgPool)
-            # Flax AvgPool N-D destekler.
             mask_compressed = nn.avg_pool(mask_padded, window_shape=(6,), strides=(4,), padding='VALID')
             
-            # Eğer mask_compressed > 0 ise o patch kısmen doludur.
-            # Bunu ağırlık olarak kullanabiliriz.
+            # --- ATTENTION POOLING ---
+            pooled_x = AttentionPooling(hidden_dim=self.hidden_dim)(curr_x, mask=mask_compressed)
             
-            # Weighted Mean Pooling
-            # sum(x * mask) / sum(mask)
-            
-            # Boyut eşleşmesi kontrolü:
-            # x_encoded: (B, L_new, D)
-            # mask_compressed: (B, L_new, 1)
-            
-            sum_embeddings = jnp.sum(curr_x * mask_compressed, axis=1)
-            sum_mask = jnp.sum(mask_compressed, axis=1) + 1e-9
-            
-            pooled_x = sum_embeddings / sum_mask
             logits = nn.Dense(self.num_classes)(pooled_x)
         else:
-            logits = nn.Dense(self.vocab_size)(curr_x) # Vocab size 256 olmalı
+            logits = nn.Dense(self.vocab_size)(curr_x)
         
         return logits

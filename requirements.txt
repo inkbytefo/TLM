@@ -1,0 +1,11 @@
+## Developer: inkbytefo
+## Modified: 2025-12-01
+jax
+jaxlib
+flax
+optax
+numpy
+hydra-core
+pytest
+tensorflow
+tensorflow-datasets

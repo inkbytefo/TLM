@@ -12,7 +12,7 @@ from src.training.trainer import create_generative_train_state
 import tensorflow as tf
 tf.config.set_visible_devices([], 'GPU')
 
-@functools.partial(jax.jit, static_argnames=['temperature'])
+@functools.partial(jax.jit, static_argnames=['apply_fn', 'temperature'])
 def generate_step(params, apply_fn, curr_seq, t, temperature=1.0):
     """
     Single step generation (JIT compiled).

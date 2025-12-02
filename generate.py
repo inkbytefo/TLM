@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import os
+import functools
 from flax.training import checkpoints
 from config import Config
 from src.utils.common import setup_logger, set_seed
@@ -11,33 +12,59 @@ from src.training.trainer import create_generative_train_state
 import tensorflow as tf
 tf.config.set_visible_devices([], 'GPU')
 
-def generate(state, prompt, max_new_tokens=100, temperature=1.0):
+@functools.partial(jax.jit, static_argnames=['temperature'])
+def generate_step(params, apply_fn, curr_seq, t, temperature=1.0):
     """
-    Autoregressive generation.
+    Single step generation (JIT compiled).
+    curr_seq: (Batch, MaxLen) - Padded
+    t: int - Index of the next token to generate (we need logits at t-1)
     """
-    # prompt: (Batch, Current_Len)
-    curr_seq = prompt
+    # Forward pass on the full sequence (masked by causality)
+    logits = apply_fn({'params': params}, curr_seq, train=False)
     
-    for _ in range(max_new_tokens):
-        # Forward pass
-        # We only care about the last token's logits for the next prediction
-        logits = state.apply_fn({'params': state.params}, curr_seq, train=False)
+    # logits: (Batch, MaxLen, Vocab)
+    # We want the prediction for position t, which comes from logits at t-1
+    next_token_logits = logits[:, t-1, :] / temperature
+    
+    # Greedy sampling
+    next_token = jnp.argmax(next_token_logits, axis=-1) # (Batch,)
+    
+    # Update sequence
+    # curr_seq is immutable, return new one
+    next_seq = curr_seq.at[:, t].set(next_token)
+    
+    return next_seq
+
+def generate(state, prompt, max_new_tokens=100, temperature=1.0, max_len=2048):
+    """
+    Autoregressive generation with fixed shape to avoid recompilation.
+    """
+    # prompt: (Batch, PromptLen)
+    B, P = prompt.shape
+    
+    # Pad to max_len
+    # We assume 0 is a safe pad token (it's a byte value, but causal masking handles it)
+    curr_seq = jnp.zeros((B, max_len), dtype=jnp.int32)
+    curr_seq = curr_seq.at[:, :P].set(prompt)
+    
+    print(f"Starting generation ({max_new_tokens} tokens)...")
+    
+    for i in range(max_new_tokens):
+        t = P + i
+        if t >= max_len:
+            break
+            
+        curr_seq = generate_step(state.params, state.apply_fn, curr_seq, t, temperature)
         
-        # logits: (Batch, SeqLen, Vocab)
-        next_token_logits = logits[:, -1, :] / temperature
-        
-        # Greedy sampling (argmax)
-        next_token = jnp.argmax(next_token_logits, axis=-1)
-        
-        # Reshape for concatenation: (Batch, 1)
-        next_token = next_token[:, None]
-        
-        # Append to sequence
-        curr_seq = jnp.concatenate([curr_seq, next_token], axis=1)
-        
-        # Stop if we hit a specific token? (Optional, skipping for now)
-        
-    return curr_seq
+        # Optional: Print progress
+        if i % 10 == 0:
+            print(f"Step {i}/{max_new_tokens}", end='\r')
+            
+    print(f"Generation complete.          ")
+    
+    # Return only the valid part
+    final_len = P + max_new_tokens
+    return curr_seq[:, :final_len]
 
 def main():
     config = Config()

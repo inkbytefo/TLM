@@ -65,13 +65,15 @@ def main():
         logger.warning("TextGenConfig not found in config. Using defaults.")
         text_file = 'data/shakespeare.txt'
         seq_len = 1024
-        batch_size = 32
+        batch_size = 8
         num_steps = 5000
+        accum_steps = 4
     else:
         text_file = text_config.dataset_path
         seq_len = text_config.seq_len
         batch_size = text_config.batch_size
         num_steps = getattr(text_config, 'num_steps', 5000)
+        accum_steps = getattr(text_config, 'accum_steps', 4)
 
     # Override config
     config.data.task_name = 'text_generation'
@@ -102,6 +104,8 @@ def main():
     logger.info(f"Vocabulary Size: {vocab_size}")
     logger.info(f"Training Batches: {len(train_loader)}")
     logger.info(f"Validation Batches: {len(val_loader)}")
+    logger.info(f"Gradient Accumulation Steps: {accum_steps}")
+    logger.info(f"Effective Batch Size: {batch_size * accum_steps}")
 
     # Update config with vocab size
     config.data.vocab_size = vocab_size
@@ -126,21 +130,34 @@ def main():
         "ROMEO:"
     ]
 
-    # Training loop
+    # Training loop with gradient accumulation
     global_step = start_step
+    train_iter = iter(train_loader)
+
     for epoch in range(1000):  # Large number of epochs
         logger.info(f"\n=== Epoch {epoch + 1} ===")
 
         # Training
-        for batch_idx, (inputs, targets) in enumerate(train_loader):
+        while global_step < config.training.num_steps:
             global_step += 1
 
             if global_step > config.training.num_steps:
                 break
 
-            # Prepare batch for train_step_generative
-            # The function expects batch['input'] to contain the input tokens
-            batch = {'input': inputs}
+            # Collect multiple batches for gradient accumulation
+            accumulated_inputs = []
+            for _ in range(accum_steps):
+                try:
+                    inputs, targets = next(train_iter)
+                except StopIteration:
+                    # Reset iterator when epoch ends
+                    train_iter = iter(train_loader)
+                    inputs, targets = next(train_iter)
+
+                accumulated_inputs.append(inputs)
+
+            # Stack to create 3D tensor: (Accum, Batch, SeqLen)
+            batch = {'input': jnp.stack(accumulated_inputs, axis=0)}
 
             state, loss, acc, rng = train_step_generative(
                 state,

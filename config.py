@@ -20,10 +20,11 @@ class TextGenConfig:
     """Configuration for text generation training (Shakespeare, code, etc.)"""
     dataset_path = 'data/shakespeare.txt'
     seq_len = 1024
-    batch_size = 32
+    batch_size = 8  # Smaller batch for gradient accumulation (8 * 8 = 64 effective)
     num_steps = 5000
     eval_every = 200
     sample_every = 200  # Generate sample text every N steps
+    accum_steps = 4  # Gradient accumulation steps (8 * 4 = 32 effective batch size)
 
 class TrainingConfig:
     learning_rate = 1e-4  # 2e-4 -> 1e-4 (Daha stabil öğrenme)

@@ -111,8 +111,9 @@ def test_copy_ability(use_memory=False, train_steps=0):
 
     vocab_size = 50
     seq_len = 32
-    num_train = 500
-    num_test = 100
+    # INCREASED DATA SIZE TO PREVENT OVERFITTING
+    num_train = 2000
+    num_test = 200
 
     logger.info(f"\n{'='*70}")
     logger.info(f"COPY TASK TEST - Memory: {use_memory}, Train Steps: {train_steps}")
@@ -150,7 +151,7 @@ def test_copy_ability(use_memory=False, train_steps=0):
         # Training loop
         for step in range(train_steps):
             # Random batch
-            batch_size = 32
+            batch_size = 64
             indices = np.random.randint(0, num_train, size=batch_size)
             batch_inputs = train_inputs[indices]
             batch_targets = train_targets[indices]
@@ -176,7 +177,7 @@ def test_copy_ability(use_memory=False, train_steps=0):
             loss, grads = jax.value_and_grad(loss_fn)(state.params)
             state = state.apply_gradients(grads=grads)
 
-            if (step + 1) % 20 == 0:
+            if (step + 1) % 100 == 0:
                 logger.info(f"Step {step+1}/{train_steps} | Loss: {float(loss):.4f}")
 
         params = state.params
@@ -184,14 +185,21 @@ def test_copy_ability(use_memory=False, train_steps=0):
     # Test
     logger.info(f"\nTesting on {num_test} examples...")
 
-    # CRITICAL FIX: Process each example independently with its own memory state
-    # Each sequence needs to build up its own associations from scratch
+    # OPTIMIZED: Batch prediction for speed
+    # Each sequence needs its own memory state
+    batch_size_test = 64  # Process in batches
     predictions = []
-    for i in range(num_test):
-        single_input = test_inputs[i:i+1]  # (1, seq_len)
-        logits_i = model.apply({'params': params}, single_input, train=False)
-        pred_i = jnp.argmax(logits_i[0, -1])  # Get prediction for last token
-        predictions.append(pred_i)
+    for i in range(0, num_test, batch_size_test):
+        batch_inputs_i = test_inputs[i:i+batch_size_test]
+        batch_size_i = batch_inputs_i.shape[0]
+
+        batch_predictions = []
+        for j in range(batch_size_i):
+            single_input = batch_inputs_i[j:j+1]  # (1, seq_len)
+            logits_ij = model.apply({'params': params}, single_input, train=False)
+            pred_ij = jnp.argmax(logits_ij[0, -1])
+            batch_predictions.append(pred_ij)
+        predictions.extend(batch_predictions)
 
     predictions = jnp.array(predictions)  # (num_test,)
 
@@ -232,13 +240,13 @@ def main():
     logger.info("\n[TEST 2] Memory enabled, no training")
     results['memory_untrained'] = test_copy_ability(use_memory=True, train_steps=0)
 
-    # Test 3: No memory, with training (200 steps)
-    logger.info("\n[TEST 3] No memory, with training (200 steps)")
-    results['no_memory_trained'] = test_copy_ability(use_memory=False, train_steps=200)
+    # Test 3: No memory, with training (500 steps)
+    logger.info("\n[TEST 3] No memory, with training (500 steps)")
+    results['no_memory_trained'] = test_copy_ability(use_memory=False, train_steps=500)
 
-    # Test 4: Memory enabled, with training (200 steps)
-    logger.info("\n[TEST 4] Memory enabled, with training (200 steps)")
-    results['memory_trained'] = test_copy_ability(use_memory=True, train_steps=200)
+    # Test 4: Memory enabled, with training (500 steps)
+    logger.info("\n[TEST 4] Memory enabled, with training (500 steps)")
+    results['memory_trained'] = test_copy_ability(use_memory=True, train_steps=500)
 
     # Summary
     logger.info("\n" + "="*70)

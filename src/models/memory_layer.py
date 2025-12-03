@@ -42,11 +42,10 @@ class DeltaMemoryLayer(nn.Module):
         self.W_o = nn.Dense(self.hidden_dim, use_bias=True, name='output_proj')
 
         # Learnable scale for memory contribution
-        # FIX: 0.0 ile başlat (Identity initialization).
-        # Model hafızayı kullanmayı öğrendikçe bunu artıracak.
+        # FIX: 0.1 ile başlat (Hafıza hafifçe aktif) - Key norm sayesinde güvenli
         self.scale_param = self.param(
             'memory_scale',
-            nn.initializers.constant(0.0),
+            nn.initializers.constant(0.1),
             (1,)
         )
 

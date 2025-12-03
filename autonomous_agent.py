@@ -1,6 +1,6 @@
 """
 Autonomous Agent Loop for Spectral-JAX.
-Corrected to load Curriculum Checkpoints and force interaction.
+Corrected to match model signature (init_memory_state).
 """
 
 import time
@@ -28,13 +28,12 @@ class AgentLoop:
         self.logger = setup_logger()
         self.logger.info("Initializing Autonomous Agent Loop...")
         
-        # Initialize Model State using Trainer Utility (Ensures consistency)
+        # Initialize Model State
         self.rng = jax.random.PRNGKey(42)
         self.rng, init_rng = jax.random.split(self.rng)
         self.state = create_generative_train_state(init_rng, self.config)
         
-        # --- CRITICAL: LOAD CURRICULUM CHECKPOINT ---
-        # Priority order for checkpoints
+        # Load Checkpoint
         ckpt_paths = [
             os.path.join(os.getcwd(), "checkpoints", "curriculum", "Stage_4_Autonomy", "best"),
             os.path.join(os.getcwd(), "checkpoints", "autonomous_model"),
@@ -53,8 +52,7 @@ class AgentLoop:
                     self.logger.warning(f"Failed to load {ckpt_dir}: {e}")
         
         if not loaded:
-            self.logger.error("!!! NO CHECKPOINT FOUND. AGENT IS UNTRAINED (RANDOM) !!!")
-            self.logger.error("Please run: python train_curriculum.py")
+            self.logger.error("!!! NO CHECKPOINT FOUND. AGENT IS UNTRAINED !!!")
 
         # Initialize Memory State
         self.memory_state = None 
@@ -70,17 +68,18 @@ class AgentLoop:
         self.rng, step_rng = jax.random.split(self.rng)
         
         # Forward pass
+        # FIX: Use 'init_memory_state' to match model definition
         logits, new_memory_state = self.state.apply_fn(
             {'params': self.state.params},
             input_seq,
-            memory_state=self.memory_state,
+            init_memory_state=self.memory_state,
             train=False
         )
         
         # Update memory state
         self.memory_state = new_memory_state
         
-        # Sampling with Temperature
+        # Sampling
         next_token_logits = logits[0, -1, :] / self.config.agent.temperature
         next_token = int(jax.random.categorical(step_rng, next_token_logits))
         
@@ -107,7 +106,6 @@ class AgentLoop:
                         _ = self.step(token)
                     
                     # 2. Force "SPEAK" token to trigger response
-                    # This acts as a "Go" signal for the model
                     last_output = self.step(SPEAK_TOKEN)
                     print(f"[AGENT]: ", end='', flush=True)
                     
@@ -119,39 +117,30 @@ class AgentLoop:
                 # 3. Agent Reaction Loop
                 current_token = last_output
                 
-                for _ in range(200): # Max response length
-                    # Handle Control Tokens
+                for _ in range(200): 
                     if current_token == WAIT_TOKEN:
-                        if not user_text: # Only print wait if we are in silence mode
+                        if not user_text:
                             sys.stdout.write(".")
                             sys.stdout.flush()
                         break 
-                        
                     elif current_token == SILENCE_TOKEN:
                          break
-                         
                     elif current_token == THINK_TOKEN:
-                        # Internal thought
                         pass
-                        
                     elif current_token == SPEAK_TOKEN:
-                        # Already handled or spontaneous speech
                         pass
-                        
                     else:
-                        # Text Output
                         if current_token < 256:
                             try:
                                 char = bytes([current_token]).decode('utf-8')
                                 print(char, end='', flush=True)
                             except:
                                 pass 
-                            
-                    # Generate next token
+                    
                     current_token = self.step(current_token)
                     
                 if user_text:
-                    print() # Newline after response
+                    print() 
 
         except KeyboardInterrupt:
             print("\n[System] Agent Loop Terminated.")

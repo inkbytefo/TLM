@@ -15,7 +15,6 @@ def create_train_state(rng, config):
         num_classes=10
     )
     
-    # Dummy input shape: (1, SeqLen)
     dummy_input = jnp.ones((1, config.data.seq_len), dtype=jnp.int32)
     params = model.init(rng, dummy_input, train=False)['params']
     
@@ -36,10 +35,6 @@ def create_train_state(rng, config):
     )
 
 def create_generative_train_state(rng, config):
-    """
-    Creates TrainState for SpectralGPT (Generative).
-    """
-    # Get memory config if available
     use_memory = getattr(config.model, 'use_memory', False)
     memory_dim = getattr(config.model, 'memory_dim', 64)
     memory_interval = getattr(config.model, 'memory_interval', 2)
@@ -54,7 +49,6 @@ def create_generative_train_state(rng, config):
         memory_interval=memory_interval
     )
     
-    # Dummy input: (1, SeqLen)
     dummy_input = jnp.zeros((1, config.data.seq_len), dtype=jnp.int32)
     params = model.init(rng, dummy_input, train=False)['params']
     
@@ -76,37 +70,25 @@ def create_generative_train_state(rng, config):
 
 @functools.partial(jax.jit, static_argnames=('label_smoothing',))
 def train_step(state, batch, rng, label_smoothing=0.0):
-    """
-    Gradient Accumulation + Label Smoothing destekli train step.
-    """
     accum_steps = batch['input'].shape[0]
     dropout_rngs = jax.random.split(rng, accum_steps)
     
     def compute_loss(params, minibatch, dropout_rng):
-        outputs = state.apply_fn(
+        logits = state.apply_fn(
             {'params': params}, 
             minibatch['input'], 
             train=True, 
             rngs={'dropout': dropout_rng}
         )
-        if isinstance(outputs, tuple):
-            logits = outputs[0]
-        else:
-            logits = outputs
         
-        # --- Label Smoothing ---
         if label_smoothing > 0.0:
-            # One-hot encode
             one_hot_labels = jax.nn.one_hot(minibatch['label'], num_classes=10)
-            # Smooth
             soft_labels = (1.0 - label_smoothing) * one_hot_labels + (label_smoothing / 10.0)
-            
             loss = optax.softmax_cross_entropy(logits=logits, labels=soft_labels).mean()
         else:
             loss = optax.softmax_cross_entropy_with_integer_labels(
                 logits=logits, labels=minibatch['label']
             ).mean()
-        # -----------------------
         
         acc = jnp.mean(jnp.argmax(logits, -1) == minibatch['label'])
         return loss, (logits, acc)
@@ -118,17 +100,10 @@ def train_step(state, batch, rng, label_smoothing=0.0):
         return carry, (loss, acc, grads)
 
     scan_inputs = (batch, dropout_rngs)
-    
-    _, (losses, accuracies, grads) = jax.lax.scan(
-        scan_step, 
-        None,
-        scan_inputs
-    )
+    _, (losses, accuracies, grads) = jax.lax.scan(scan_step, None, scan_inputs)
     
     avg_loss = jnp.mean(losses)
     avg_acc = jnp.mean(accuracies)
-    
-    # Grads bir PyTree, yaprakların ortalamasını almalıyız
     avg_grads = jax.tree.map(lambda x: jnp.mean(x, axis=0), grads)
     
     state = state.apply_gradients(grads=avg_grads)
@@ -138,46 +113,33 @@ def train_step(state, batch, rng, label_smoothing=0.0):
 
 @functools.partial(jax.jit)
 def train_step_generative(state, batch, rng):
-    """
-    Train step for Next-Token Prediction (Generative).
-    Input: x[0...L-1]
-    Target: x[1...L]
-    """
     accum_steps = batch['input'].shape[0]
     dropout_rngs = jax.random.split(rng, accum_steps)
     
     def compute_loss(params, minibatch, dropout_rng):
-        # Prepare Inputs and Targets
-        # x: (Batch, L)
         seq = minibatch['input']
-        
-        # Input: 0 to L-1
         inputs = seq[:, :-1]
-        # Target: 1 to L
         targets = seq[:, 1:]
         
-        outputs = state.apply_fn(
+        # FIX: Unpack tuple return (logits, memory_states)
+        out = state.apply_fn(
             {'params': params}, 
             inputs, 
             train=True, 
             rngs={'dropout': dropout_rng}
         )
-        # Handle both tuple return (logits, states) and single return (logits)
-        if isinstance(outputs, tuple):
-            logits = outputs[0]
-        else:
-            logits = outputs
         
-        # logits: (Batch, L-1, Vocab)
-        # targets: (Batch, L-1)
+        # Handle both return types (logits only OR logits, states)
+        if isinstance(out, tuple):
+            logits = out[0]
+        else:
+            logits = out
         
         loss = optax.softmax_cross_entropy_with_integer_labels(
             logits=logits, labels=targets
         ).mean()
         
-        # Accuracy (Next Token Prediction Accuracy)
         acc = jnp.mean(jnp.argmax(logits, -1) == targets)
-        
         return loss, (logits, acc)
 
     def scan_step(carry, x):
@@ -187,16 +149,10 @@ def train_step_generative(state, batch, rng):
         return carry, (loss, acc, grads)
 
     scan_inputs = (batch, dropout_rngs)
-    
-    _, (losses, accuracies, grads) = jax.lax.scan(
-        scan_step, 
-        None,
-        scan_inputs
-    )
+    _, (losses, accuracies, grads) = jax.lax.scan(scan_step, None, scan_inputs)
     
     avg_loss = jnp.mean(losses)
     avg_acc = jnp.mean(accuracies)
-    
     avg_grads = jax.tree.map(lambda x: jnp.mean(x, axis=0), grads)
     
     state = state.apply_gradients(grads=avg_grads)

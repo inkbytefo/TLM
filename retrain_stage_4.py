@@ -22,6 +22,9 @@ def main():
     config.data.batch_size = 32
     config.training.learning_rate = 1e-4 
     config.training.num_steps = 2000 # Increased steps for dynamic data
+    config.training.warmup_steps = 200 # Reduced warmup for short training
+    
+    logger.info(f"DEBUG: num_steps={config.training.num_steps}, warmup_steps={config.training.warmup_steps}")
     
     # Load from Stage 3 (Skills) to recover lost knowledge
     load_dir = os.path.join(os.getcwd(), "checkpoints", "curriculum", "Stage_3_Skills", "best")

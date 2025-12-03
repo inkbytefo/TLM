@@ -3,11 +3,15 @@ Memory Layer Copy Task Test.
 Tests the associative recall capability of DeltaMemoryLayer (Error-Correcting).
 
 Task: Given key-value pairs, retrieve the correct value for a query key.
-Example: "a:10 b:20 c:30 a:?" -> "10"
+Format: "k1 v1 k2 v2 k3 v3 kQ" -> Target: vQ
 
-This test validates the Delta Rule's ability to OVERWRITE memory:
-- If "a:10" is written, then "a:20" is written, the memory should contain "a:20"
-- This solves the Catastrophic Forgetting problem in continual learning
+Example: "5 10 8 20 3 30 5" -> Target: 10
+         (key 5 maps to value 10, query is 5, answer is 10)
+
+This test validates the Delta Rule's ability to:
+1. Associate keys with values in memory
+2. Retrieve values given query keys
+3. OVERWRITE old associations (continual learning without catastrophic forgetting)
 """
 
 import jax
@@ -24,8 +28,16 @@ def generate_copy_data(num_examples=100, seq_len=32, vocab_size=50, num_pairs=3)
     """
     Generate synthetic key-value copy task data.
 
-    Format: "k1:v1 k2:v2 k3:v3 kq:?"
-    Target: "vq" (value corresponding to query key kq)
+    SIMPLIFIED FORMAT (no noise tokens):
+    Format: "k1 v1 k2 v2 k3 v3 ... kQ"
+    Target: "vQ" (value corresponding to query key kQ)
+
+    The model must:
+    1. At position i (key), write key to memory
+    2. At position i+1 (value), associate value with previous key
+    3. At query position (last token), retrieve the correct value
+
+    This removes noisy tokens (:, SPACE, ?) that interfere with learning.
 
     Args:
         num_examples: Number of training examples
@@ -40,33 +52,25 @@ def generate_copy_data(num_examples=100, seq_len=32, vocab_size=50, num_pairs=3)
     inputs = []
     targets = []
 
-    # Special tokens
-    COLON = vocab_size - 3
-    SPACE = vocab_size - 2
-    QUERY = vocab_size - 1
-
     for _ in range(num_examples):
         # Generate unique keys and values
-        keys = np.random.randint(0, vocab_size - 3, size=num_pairs)
-        values = np.random.randint(0, vocab_size - 3, size=num_pairs)
+        # Reserve vocab space: 0-39 for keys/values, 40-49 reserved
+        keys = np.random.randint(0, vocab_size // 2, size=num_pairs)
+        values = np.random.randint(0, vocab_size // 2, size=num_pairs)
 
         # Select a random key to query
         query_idx = np.random.randint(0, num_pairs)
         query_key = keys[query_idx]
         target_value = values[query_idx]
 
-        # Build sequence: k1:v1 k2:v2 ... kq:?
+        # Build sequence: k1 v1 k2 v2 k3 v3 ... kQ
         seq = []
         for i in range(num_pairs):
-            seq.append(keys[i])
-            seq.append(COLON)
-            seq.append(values[i])
-            seq.append(SPACE)
+            seq.append(int(keys[i]))      # Key position
+            seq.append(int(values[i]))    # Value position (immediately after key)
 
-        # Add query
-        seq.append(query_key)
-        seq.append(COLON)
-        seq.append(QUERY)
+        # Add query key at the end
+        seq.append(int(query_key))
 
         # Pad to seq_len
         seq = seq[:seq_len]

@@ -52,8 +52,8 @@ class DeltaMemoryLayer(nn.Module):
     hidden_dim: int
     memory_dim: int = 64
     dropout_rate: float = 0.1
-    beta_min: float = 0.01  # Learning rate for memory updates
-    beta_max: float = 0.5
+    beta_min: float = 0.001  # Learning rate for memory updates (lower for stability)
+    beta_max: float = 0.1    # Max learning rate (lower for stability)
 
     def setup(self):
         """Initialize learnable parameters."""
@@ -107,12 +107,13 @@ class DeltaMemoryLayer(nn.Module):
         beta: float
     ) -> jnp.ndarray:
         """
-        Update memory using Delta Rule (Error-Correcting).
+        Update memory using Delta Rule (Error-Correcting) with numerical stability.
 
         Delta Rule Update:
             1. Predict current value: v_pred = S_{t-1} @ k
             2. Compute error: delta = v - v_pred
-            3. Update memory: S_t = S_{t-1} + β * delta ⊗ k
+            3. Normalize delta and key to prevent gradient explosion
+            4. Update memory: S_t = S_{t-1} + β * delta ⊗ k (with clipping)
 
         This allows the memory to OVERWRITE old information!
 
@@ -133,12 +134,27 @@ class DeltaMemoryLayer(nn.Module):
         # delta = v - v_pred
         delta = value - v_pred  # (B, D_mem)
 
-        # Step 3: Compute update using outer product
-        # update = delta ⊗ k: (B, D_mem, 1) @ (B, 1, D_mem) -> (B, D_mem, D_mem)
-        update = jnp.einsum('bd,be->bde', delta, key)
+        # Step 3: Normalize delta and key to prevent gradient explosion
+        # This ensures outer product stays bounded
+        eps = 1e-8
+        delta_norm = jnp.linalg.norm(delta, axis=-1, keepdims=True) + eps
+        key_norm = jnp.linalg.norm(key, axis=-1, keepdims=True) + eps
 
-        # Step 4: Apply delta update to memory
-        new_state = memory_state + beta * update
+        delta_normalized = delta / delta_norm
+        key_normalized = key / key_norm
+
+        # Step 4: Compute update using normalized outer product
+        # update = delta ⊗ k: (B, D_mem, 1) @ (B, 1, D_mem) -> (B, D_mem, D_mem)
+        update = jnp.einsum('bd,be->bde', delta_normalized, key_normalized)
+
+        # Step 5: Clip update magnitude for additional stability
+        # This prevents any single update from dominating the memory
+        update_clipped = jnp.clip(update, -1.0, 1.0)
+
+        # Step 6: Apply scaled delta update to memory
+        # Scale by original norms to preserve magnitude information
+        scale = jnp.sqrt(delta_norm * key_norm)
+        new_state = memory_state + beta * scale[..., None] * update_clipped
 
         return new_state
 
@@ -328,7 +344,7 @@ if __name__ == "__main__":
     print(f"Memory state shape: {memory_state.shape}")
 
     # Test beta computation
-    beta = jax.nn.sigmoid(params['beta'][0]) * (0.5 - 0.01) + 0.01
+    beta = jax.nn.sigmoid(params['beta'][0]) * (0.1 - 0.001) + 0.001
     print(f"Beta (learning rate): {float(beta):.4f}")
 
     # Test copying capability

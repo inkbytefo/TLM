@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import os
 from config import Config, AgentLoopConfig
 
 class AutonomousDataGenerator:
@@ -9,42 +10,43 @@ class AutonomousDataGenerator:
         self.config = Config()
         self.loop_conf = AgentLoopConfig
         
-        # Templates for dynamic generation
-        self.greetings = ["Merhaba", "Selam", "Hey", "Nasılsın", "Günaydın"]
-        self.responses = ["Merhaba!", "Selam, dinliyorum.", "İyiyim, sen nasılsın?", "Buyrun?"]
-        
-    def encode(self, text):
-        return [b for b in text.encode('utf-8')]
+        # Load Shakespeare for language capability
+        self.text_data = ""
+        try:
+            with open('data/shakespeare.txt', 'r', encoding='utf-8') as f:
+                self.text_data = f.read()
+        except:
+            self.text_data = "Python is a programming language. JAX is a library. The sky is blue." * 100
 
-    def generate_math_pair(self):
-        """Generates a random math problem and answer."""
-        a = random.randint(1, 100)
-        b = random.randint(1, 100)
+        # Knowledge Base (General Culture)
+        self.qa_pairs = [
+            ("Nasılsın?", "Sistemlerim nominal çalışıyor, teşekkürler."),
+            ("Sen kimsin?", "Ben Spectral-JAX mimarisiyle çalışan otonom bir yapay zekayım."),
+            ("Görevin ne?", "Kullanıcı komutlarını dinlemek, kod çalıştırmak ve yardımcı olmak."),
+            ("Python nedir?", "Python, okunabilirliği yüksek, yorumlanan bir programlama dilidir."),
+            ("JAX nedir?", "JAX, Google tarafından geliştirilen, GPU/TPU hızlandırmalı bir sayısal hesaplama kütüphanesidir."),
+            ("Evrenin anlamı ne?", "42."),
+            ("Hangi yıldayız?", "Veri tabanım güncel değil ama 2025 yılındayız diyebilirim."),
+        ]
+
+    def encode(self, text):
+        return [b for b in text.encode('utf-8', errors='ignore')]
+
+    def get_random_text_segment(self, length=50):
+        if len(self.text_data) < length: return "Text data too short."
+        start = random.randint(0, len(self.text_data) - length - 1)
+        return self.text_data[start:start+length]
+
+    def generate_math(self):
+        a = random.randint(1, 999)
+        b = random.randint(1, 999)
         op = random.choice(['+', '-', '*'])
-        
         if op == '+': res = a + b
         elif op == '-': res = a - b
         elif op == '*': res = a * b
-        
-        questions = [
-            f"{a}{op}{b}",
-            f"{a} {op} {b} kaç?",
-            f"{a} artı {b}",
-            f"Hesapla: {a}{op}{b}"
-        ]
-        answers = [
-            f"{res}",
-            f"Sonuç {res}",
-            f"{res} eder.",
-            f"Cevap: {res}"
-        ]
-        return random.choice(questions), random.choice(answers)
+        return f"{a} {op} {b}", str(res)
 
     def generate_batch(self):
-        """
-        Generates a batch of sequences simulating autonomous interaction.
-        Format: [User Input] -> [Response] -> [Silence/Wait]
-        """
         batch_inputs = []
         
         SILENCE = self.loop_conf.SILENCE_TOKEN
@@ -56,58 +58,53 @@ class AutonomousDataGenerator:
             scenario = random.random()
             seq = []
             
-            if scenario < 0.2: # 20% Pure Silence
-                length = self.seq_len
-                for _ in range(length // 2):
+            # --- SCENARIO 1: SILENCE (20%) ---
+            if scenario < 0.2:
+                for _ in range(self.seq_len // 2):
                     seq.append(SILENCE)
                     seq.append(WAIT)
+            
+            # --- SCENARIO 2: MATH (30%) ---
+            elif scenario < 0.5:
+                q, a = self.generate_math()
+                seq.extend(self.encode(q))
+                seq.append(THINK) # Düşün
+                seq.append(SPEAK) # Konuş
+                seq.extend(self.encode(a))
                 
-            else: # 80% Interaction
-                # Decide type of interaction
-                if random.random() < 0.5:
-                    # Math/Logic (Dynamic)
-                    user_text, agent_text = self.generate_math_pair()
-                else:
-                    # Chat (Semi-dynamic)
-                    user_text = random.choice(self.greetings)
-                    agent_text = random.choice(self.responses)
-                
-                u_tokens = self.encode(user_text)
-                a_tokens = self.encode(agent_text)
-                
-                # 1. User speaks
-                seq.extend(u_tokens)
-                
-                # 2. Agent Thinks (Optional but good for structure)
-                # Always add THINK for consistency in this training phase
+            # --- SCENARIO 3: CHAT / QA (30%) ---
+            elif scenario < 0.8:
+                q, a = random.choice(self.qa_pairs)
+                seq.extend(self.encode(q))
                 seq.append(THINK)
-                
-                # 3. Agent Speaks
                 seq.append(SPEAK)
-                seq.extend(a_tokens)
+                seq.extend(self.encode(a))
                 
-                # 4. Return to Silence/Wait
-                remaining = self.seq_len - len(seq)
-                if remaining > 0:
-                    # Fill rest with silence/wait pairs
-                    for _ in range(remaining // 2 + 1):
-                        if len(seq) < self.seq_len:
-                            seq.append(SILENCE)
-                        if len(seq) < self.seq_len:
-                            seq.append(WAIT)
+            # --- SCENARIO 4: LITERATURE / READING (20%) ---
+            else:
+                # User asks to read/complete text
+                text_segment = self.get_random_text_segment(100)
+                prompt = "Oku: "
+                seq.extend(self.encode(prompt))
+                seq.append(THINK)
+                seq.append(SPEAK)
+                seq.extend(self.encode(text_segment))
+
+            # Fill rest with Silence/Wait to teach returning to idle
+            remaining = self.seq_len - len(seq)
+            if remaining > 0:
+                for _ in range(remaining // 2 + 1):
+                    if len(seq) < self.seq_len: seq.append(SILENCE)
+                    if len(seq) < self.seq_len: seq.append(WAIT)
             
-            # Truncate or Pad
+            # Truncate/Pad
             seq = seq[:self.seq_len]
-            
             if len(seq) < self.seq_len:
-                pad = [0] * (self.seq_len - len(seq))
-                seq.extend(pad)
+                seq.extend([0] * (self.seq_len - len(seq)))
                 
             batch_inputs.append(seq)
 
-        return {
-            'input': np.array(batch_inputs, dtype=np.int32)
-        }
+        return {'input': np.array(batch_inputs, dtype=np.int32)}
 
 def get_autonomous_dataloader(batch_size, seq_len):
     gen = AutonomousDataGenerator(batch_size, seq_len)

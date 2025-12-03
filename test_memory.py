@@ -140,8 +140,8 @@ def test_copy_ability(use_memory=False, train_steps=0):
     if train_steps > 0:
         logger.info(f"\nTraining for {train_steps} steps...")
 
-        # Lower learning rate for stability
-        tx = optax.adam(learning_rate=5e-4)
+        # Increased LR to 1e-3
+        tx = optax.adam(learning_rate=1e-3)
         state = train_state.TrainState.create(
             apply_fn=model.apply,
             params=params,

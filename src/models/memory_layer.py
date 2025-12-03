@@ -28,8 +28,8 @@ class DeltaMemoryLayer(nn.Module):
     hidden_dim: int
     memory_dim: int = 64
     dropout_rate: float = 0.1
-    beta_min: float = 0.1    # Artırıldı: 0.01 -> 0.1 (Daha hızlı update)
-    beta_max: float = 0.9    # Artırıldı: 0.3 -> 0.9 (Daha agresif update)
+    beta_min: float = 0.01
+    beta_max: float = 0.5    # Stabilite için düşürüldü
 
     def setup(self):
         """Initialize learnable parameters."""
@@ -42,10 +42,11 @@ class DeltaMemoryLayer(nn.Module):
         self.W_o = nn.Dense(self.hidden_dim, use_bias=True, name='output_proj')
 
         # Learnable scale for memory contribution
-        # KRİTİK DEĞİŞİKLİK: 0.1 -> 1.0 (Hafıza artık başlangıçta tam etkili)
+        # FIX: 0.0 ile başlat (Identity initialization).
+        # Model hafızayı kullanmayı öğrendikçe bunu artıracak.
         self.scale_param = self.param(
             'memory_scale',
-            nn.initializers.constant(1.0),
+            nn.initializers.constant(0.0),
             (1,)
         )
 
@@ -88,17 +89,18 @@ class DeltaMemoryLayer(nn.Module):
         beta: float
     ) -> jnp.ndarray:
         """
-        Update memory using Delta Rule with Adaptive Clipping.
+        Update memory using Delta Rule with Key Normalization.
 
-        Delta Rule Update (Raw, with adaptive clipping):
-            1. Predict current value: v_pred = S_{t-1} @ k
-            2. Compute error: delta = v - v_pred
-            3. Compute raw update: update = delta ⊗ k
-            4. Adaptive clipping: Only clip if update norm exceeds threshold
-            5. Update memory: S_t = S_{t-1} + β * update_clipped
+        Delta Rule Update (Normalized Key, adaptive clipping):
+            1. Normalize Key: k_norm = k / ||k||
+            2. Predict current value: v_pred = S_{t-1} @ k_norm
+            3. Compute error: delta = v - v_pred
+            4. Compute raw update: update = delta ⊗ k_norm
+            5. Adaptive clipping: Only clip if update norm exceeds threshold
+            6. Update memory: S_t = S_{t-1} + β * update_clipped
 
         Key Difference from Previous Version:
-        - NO normalization of delta/key (preserves magnitude)
+        - KEY NORMALIZATION: Ensures Delta Rule mathematical constraints
         - Adaptive clipping only when necessary (preserves small updates)
         - Large errors → Large updates (fast correction)
         - Small errors → Small updates (precision)
@@ -112,6 +114,11 @@ class DeltaMemoryLayer(nn.Module):
         Returns:
             Updated memory state (B, D_mem, D_mem)
         """
+        # CRITICAL FIX: Normalize Key
+        # Delta rule works best when ||K|| = 1
+        key_norm = jnp.linalg.norm(key, axis=-1, keepdims=True) + 1e-6
+        key = key / key_norm
+
         # Step 1: Read current prediction from memory
         # v_pred = S @ k: (B, D_mem, D_mem) @ (B, D_mem, 1) -> (B, D_mem)
         v_pred = jnp.einsum('bde,be->bd', memory_state, key)
@@ -128,8 +135,8 @@ class DeltaMemoryLayer(nn.Module):
         # Compute Frobenius norm of update matrix for each batch
         update_norm = jnp.linalg.norm(update, axis=(1, 2), keepdims=True)  # (B, 1, 1)
 
-        # Clip threshold (relaxed for better gradient flow)
-        clip_threshold = 50.0  # Artırıldı: 10.0 -> 50.0
+        # Clip threshold (tuned for stability without losing signal)
+        clip_threshold = 20.0  # Stabilite için 20.0
 
         # Only clip if norm exceeds threshold
         # If update_norm <= clip_threshold: scale_factor = 1 (no change)

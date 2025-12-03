@@ -88,7 +88,7 @@ def create_copy_model(vocab_size, use_memory=False):
         vocab_size=vocab_size,
         hidden_dim=128,
         num_layers=4,
-        dropout_rate=0.1,
+        dropout_rate=0.0,  # Dropout kapalı (küçük veri seti için)
         use_memory=use_memory,
         memory_dim=32,
         memory_interval=2
@@ -139,8 +139,8 @@ def test_copy_ability(use_memory=False, train_steps=0):
     if train_steps > 0:
         logger.info(f"\nTraining for {train_steps} steps...")
 
-        # Create optimizer
-        tx = optax.adam(learning_rate=1e-3)
+        # Lower learning rate for stability
+        tx = optax.adam(learning_rate=5e-4)
         state = train_state.TrainState.create(
             apply_fn=model.apply,
             params=params,
@@ -232,13 +232,13 @@ def main():
     logger.info("\n[TEST 2] Memory enabled, no training")
     results['memory_untrained'] = test_copy_ability(use_memory=True, train_steps=0)
 
-    # Test 3: No memory, with training
-    logger.info("\n[TEST 3] No memory, with training (100 steps)")
-    results['no_memory_trained'] = test_copy_ability(use_memory=False, train_steps=100)
+    # Test 3: No memory, with training (200 steps)
+    logger.info("\n[TEST 3] No memory, with training (200 steps)")
+    results['no_memory_trained'] = test_copy_ability(use_memory=False, train_steps=200)
 
-    # Test 4: Memory enabled, with training
-    logger.info("\n[TEST 4] Memory enabled, with training (100 steps)")
-    results['memory_trained'] = test_copy_ability(use_memory=True, train_steps=100)
+    # Test 4: Memory enabled, with training (200 steps)
+    logger.info("\n[TEST 4] Memory enabled, with training (200 steps)")
+    results['memory_trained'] = test_copy_ability(use_memory=True, train_steps=200)
 
     # Summary
     logger.info("\n" + "="*70)

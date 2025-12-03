@@ -1,0 +1,7 @@
+Memory Layer Copy Task Results
+======================================================================
+
+baseline: 0.00%
+memory_untrained: 5.00%
+no_memory_trained: 33.00%
+memory_trained: 5.00%

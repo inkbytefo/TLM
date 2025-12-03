@@ -83,12 +83,16 @@ def train_step(state, batch, rng, label_smoothing=0.0):
     dropout_rngs = jax.random.split(rng, accum_steps)
     
     def compute_loss(params, minibatch, dropout_rng):
-        logits = state.apply_fn(
+        outputs = state.apply_fn(
             {'params': params}, 
             minibatch['input'], 
             train=True, 
             rngs={'dropout': dropout_rng}
         )
+        if isinstance(outputs, tuple):
+            logits = outputs[0]
+        else:
+            logits = outputs
         
         # --- Label Smoothing ---
         if label_smoothing > 0.0:
@@ -152,12 +156,17 @@ def train_step_generative(state, batch, rng):
         # Target: 1 to L
         targets = seq[:, 1:]
         
-        logits = state.apply_fn(
+        outputs = state.apply_fn(
             {'params': params}, 
             inputs, 
             train=True, 
             rngs={'dropout': dropout_rng}
         )
+        # Handle both tuple return (logits, states) and single return (logits)
+        if isinstance(outputs, tuple):
+            logits = outputs[0]
+        else:
+            logits = outputs
         
         # logits: (Batch, L-1, Vocab)
         # targets: (Batch, L-1)

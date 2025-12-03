@@ -61,33 +61,16 @@ def run_stage(stage_name, config, train_loader, val_loader, num_steps, prev_ckpt
         try:
             if stage_name == "Stage_4_Autonomy":
                 batch_np = next(train_loader)
-                batch = {'input': jnp.array(batch_np['input'])}
+                # Reshape (B, L) -> (B, 1, L) for gradient accumulation
+                batch = {'input': jnp.array(batch_np['input'])[:, None, :]}
             elif stage_name == "Stage_1_Logic":
                  # ListOps loader returns dict
                 batch_np = next(train_loader)
-                batch = {'input': jnp.array(batch_np['input'])}
+                batch = {'input': jnp.array(batch_np['input'])[:, None, :]}
             else:
                 # Text loaders return tuple (input, target)
-                # But train_step_generative expects a dict with 'input' key containing the full sequence
-                # The text loader yields (inputs, targets) where inputs is x[0:-1] and targets is x[1:]?
-                # Let's check src/data/text_generation.py
-                # It yields inputs, targets. 
-                # inputs = data[start:start+len], targets = data[start+1:start+len+1]
-                # train_step_generative expects 'input' to be the FULL sequence x[0:L] so it can slice it itself.
-                # Wait, train_step_generative does: seq = minibatch['input']; inputs = seq[:, :-1]; targets = seq[:, 1:]
-                # So it expects 'input' to be a sequence of length L+1? Or L?
-                # If LRA yields L, then inputs is L-1.
-                # TextGenerationDataLoader yields inputs (L) and targets (L).
-                # If we pass 'inputs' as 'input', train_step_generative will slice it further.
-                # inputs is already x[t:t+L].
-                # If train_step_generative does inputs[:, :-1], it reduces length.
-                # We should probably pass the raw sequence if possible, or adjust.
-                # TextGenerationDataLoader yields (inputs, targets). 'inputs' is a valid sequence.
-                # If we use 'inputs' as the batch['input'], train_step_generative will predict next token from it.
-                # That works.
-                
                 inputs, targets = next(train_loader)
-                batch = {'input': inputs}
+                batch = {'input': inputs[:, None, :]}
                 
         except StopIteration:
             # Restart loader if needed (mostly for text loaders)

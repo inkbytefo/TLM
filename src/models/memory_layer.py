@@ -52,8 +52,8 @@ class DeltaMemoryLayer(nn.Module):
     hidden_dim: int
     memory_dim: int = 64
     dropout_rate: float = 0.1
-    beta_min: float = 0.001  # Learning rate for memory updates (lower for stability)
-    beta_max: float = 0.1    # Max learning rate (lower for stability)
+    beta_min: float = 0.01   # Learning rate for memory updates
+    beta_max: float = 0.3    # Max learning rate (balanced for adaptive clipping)
 
     def setup(self):
         """Initialize learnable parameters."""
@@ -107,15 +107,20 @@ class DeltaMemoryLayer(nn.Module):
         beta: float
     ) -> jnp.ndarray:
         """
-        Update memory using Delta Rule (Error-Correcting) with numerical stability.
+        Update memory using Delta Rule with Adaptive Clipping.
 
-        Delta Rule Update:
+        Delta Rule Update (Raw, with adaptive clipping):
             1. Predict current value: v_pred = S_{t-1} @ k
             2. Compute error: delta = v - v_pred
-            3. Normalize delta and key to prevent gradient explosion
-            4. Update memory: S_t = S_{t-1} + β * delta ⊗ k (with clipping)
+            3. Compute raw update: update = delta ⊗ k
+            4. Adaptive clipping: Only clip if update norm exceeds threshold
+            5. Update memory: S_t = S_{t-1} + β * update_clipped
 
-        This allows the memory to OVERWRITE old information!
+        Key Difference from Previous Version:
+        - NO normalization of delta/key (preserves magnitude)
+        - Adaptive clipping only when necessary (preserves small updates)
+        - Large errors → Large updates (fast correction)
+        - Small errors → Small updates (precision)
 
         Args:
             memory_state: Current memory state (B, D_mem, D_mem)
@@ -134,27 +139,26 @@ class DeltaMemoryLayer(nn.Module):
         # delta = v - v_pred
         delta = value - v_pred  # (B, D_mem)
 
-        # Step 3: Normalize delta and key to prevent gradient explosion
-        # This ensures outer product stays bounded
-        eps = 1e-8
-        delta_norm = jnp.linalg.norm(delta, axis=-1, keepdims=True) + eps
-        key_norm = jnp.linalg.norm(key, axis=-1, keepdims=True) + eps
-
-        delta_normalized = delta / delta_norm
-        key_normalized = key / key_norm
-
-        # Step 4: Compute update using normalized outer product
+        # Step 3: Compute RAW outer product update (no normalization!)
         # update = delta ⊗ k: (B, D_mem, 1) @ (B, 1, D_mem) -> (B, D_mem, D_mem)
-        update = jnp.einsum('bd,be->bde', delta_normalized, key_normalized)
+        update = jnp.einsum('bd,be->bde', delta, key)
 
-        # Step 5: Clip update magnitude for additional stability
-        # This prevents any single update from dominating the memory
-        update_clipped = jnp.clip(update, -1.0, 1.0)
+        # Step 4: Adaptive Clipping (only clip if norm too large)
+        # Compute Frobenius norm of update matrix for each batch
+        update_norm = jnp.linalg.norm(update, axis=(1, 2), keepdims=True)  # (B, 1, 1)
 
-        # Step 6: Apply scaled delta update to memory
-        # Scale by original norms to preserve magnitude information
-        scale = jnp.sqrt(delta_norm * key_norm)
-        new_state = memory_state + beta * scale[..., None] * update_clipped
+        # Clip threshold (tuned for stability without losing signal)
+        clip_threshold = 10.0
+
+        # Only clip if norm exceeds threshold
+        # If update_norm <= clip_threshold: scale_factor = 1 (no change)
+        # If update_norm > clip_threshold: scale_factor = clip_threshold / update_norm
+        scale_factor = jnp.minimum(1.0, clip_threshold / (update_norm + 1e-8))
+
+        update_clipped = update * scale_factor
+
+        # Step 5: Apply delta update to memory
+        new_state = memory_state + beta * update_clipped
 
         return new_state
 
@@ -344,7 +348,7 @@ if __name__ == "__main__":
     print(f"Memory state shape: {memory_state.shape}")
 
     # Test beta computation
-    beta = jax.nn.sigmoid(params['beta'][0]) * (0.1 - 0.001) + 0.001
+    beta = jax.nn.sigmoid(params['beta'][0]) * (0.3 - 0.01) + 0.01
     print(f"Beta (learning rate): {float(beta):.4f}")
 
     # Test copying capability

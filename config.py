@@ -10,6 +10,7 @@ class DataConfig:
     seq_len = 2048      # Byte-Level için artırıldı
     batch_size = 16     # 32 -> 16 (OOM Fix)
     text_file_path = 'data/sonnet.txt' # Text task için dosya yolu
+    imdb_seq_len = 1024 # IMDB için sequence length
 
 class TextDataConfig:
     seq_len = 1024 # Text için belki daha kısa tutabiliriz veya aynı

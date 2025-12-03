@@ -1,5 +1,5 @@
 class ModelConfig:
-    vocab_size = 256    # Byte-Level (0-255)
+    vocab_size = 260    # Byte-Level (0-255) + Special Tokens
     hidden_dim = 256    # 128 -> 256 (Kapasite artışı)
     num_layers = 6      # 4 -> 6 (Derinlik artışı)
     dropout_rate = 0.2  # 0.1 -> 0.2 (Overfitting önlemi)
@@ -52,6 +52,18 @@ class AgentConfig:
     learning_rate = 2e-4  # Slightly higher LR for faster learning on synthetic data
     accum_steps = 2  # Gradient accumulation (16 * 2 = 32 effective batch)
 
+class AgentLoopConfig:
+    """Configuration for Autonomous Agent Loop"""
+    # Special Tokens (256-259)
+    SILENCE_TOKEN = 256
+    WAIT_TOKEN = 257
+    THINK_TOKEN = 258
+    SPEAK_TOKEN = 259
+    
+    # Loop Parameters
+    max_silence_steps = 100 # How long to wait before proactive action
+    tick_interval = 0.1 # Seconds between ticks (simulated)
+
 class TrainingConfig:
     learning_rate = 1e-4  # 2e-4 -> 1e-4 (Daha stabil öğrenme)
     weight_decay = 0.1    # 0.01 -> 0.1 (Güçlü regülarizasyon)
@@ -70,3 +82,4 @@ class Config:
         self.training = TrainingConfig()
         self.text_gen = TextGenConfig()
         self.agent = AgentConfig()
+        self.agent_loop = AgentLoopConfig()

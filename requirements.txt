@@ -9,3 +9,6 @@ hydra-core
 pytest
 tensorflow
 tensorflow-datasets
+fastapi
+uvicorn
+websockets

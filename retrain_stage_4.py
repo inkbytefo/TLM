@@ -54,7 +54,10 @@ def main():
 
     for step in range(1, config.training.num_steps + 1):
         batch_np = next(train_loader)
-        batch = {'input': jnp.array(batch_np['input'])}
+        # Reshape to (Batch, 1, SeqLen) for scan over batch dimension
+        input_data = jnp.array(batch_np['input'])
+        input_data = input_data[:, None, :] 
+        batch = {'input': input_data}
         
         state, loss, acc, rng = train_step_generative(state, batch, rng)
         

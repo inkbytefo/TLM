@@ -5,9 +5,15 @@ class ModelConfig:
     dropout_rate = 0.2  # 0.1 -> 0.2 (Overfitting önlemi)
 
 class DataConfig:
-    task_name = 'lra_listops'
+    task_name = 'text_modeling' # 'lra_listops' or 'text_modeling'
     seq_len = 2048      # Byte-Level için artırıldı
     batch_size = 16     # 32 -> 16 (OOM Fix)
+    text_file_path = 'data/sonnet.txt' # Text task için dosya yolu
+
+class TextDataConfig:
+    seq_len = 1024 # Text için belki daha kısa tutabiliriz veya aynı
+    batch_size = 8
+
 
 class TrainingConfig:
     learning_rate = 1e-4  # 2e-4 -> 1e-4 (Daha stabil öğrenme)

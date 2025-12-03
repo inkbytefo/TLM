@@ -105,7 +105,11 @@ class AgentLoop:
                     for token in input_tokens:
                         _ = self.step(token)
                     
-                    # 2. Force "SPEAK" token to trigger response
+                    # 2. Inject THINK token (Matches training data: User -> THINK -> SPEAK)
+                    _ = self.step(THINK_TOKEN)
+
+                    # 3. Force "SPEAK" token to trigger response
+                    # This acts as a "Go" signal for the model
                     last_output = self.step(SPEAK_TOKEN)
                     print(f"[AGENT]: ", end='', flush=True)
                     

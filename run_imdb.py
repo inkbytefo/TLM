@@ -107,8 +107,8 @@ def main():
             labels.append(b['label'])
             
         large_batch = {
-            'input': jnp.concatenate(inputs, axis=0),
-            'label': jnp.concatenate(labels, axis=0)
+            'input': jnp.stack(inputs, axis=0),
+            'label': jnp.stack(labels, axis=0)
         }
 
         state, loss, acc, rng = train_step(state, large_batch, rng)

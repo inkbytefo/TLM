@@ -1,21 +1,27 @@
 import jax
 import jax.numpy as jnp
 
+def next_power_of_2(n):
+    """Returns the next power of 2 greater than or equal to n."""
+    return 1 << (n - 1).bit_length()
+
 def causal_fft_conv(u, k):
     """
-    Performs causal convolution using FFT.
-    
+    Performs causal convolution using FFT with optimized padding.
+
     Args:
         u: Input signal (Batch, Length, Dim)
         k: Filter kernel (Length, Dim) - assumed to be causal (starts at t=0)
-        
+
     Returns:
         y: Convolved signal (Batch, Length, Dim)
     """
     seq_len = u.shape[1]
-    
-    # 1. Pad to at least 2*L to avoid circular convolution wrapping
-    fft_len = 2 * seq_len
+
+    # 1. Pad to next power of 2 for optimal FFT performance
+    # Must be at least 2*L to avoid circular convolution wrapping
+    min_fft_len = 2 * seq_len
+    fft_len = next_power_of_2(min_fft_len)
     
     # 2. FFT
     u_fft = jnp.fft.rfft(u, n=fft_len, axis=1) # (B, L+1, D)

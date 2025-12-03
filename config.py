@@ -16,6 +16,14 @@ class TextDataConfig:
     seq_len = 1024 # Text için belki daha kısa tutabiliriz veya aynı
     batch_size = 8
 
+class TextGenConfig:
+    """Configuration for text generation training (Shakespeare, code, etc.)"""
+    dataset_path = 'data/shakespeare.txt'
+    seq_len = 1024
+    batch_size = 32
+    num_steps = 5000
+    eval_every = 200
+    sample_every = 200  # Generate sample text every N steps
 
 class TrainingConfig:
     learning_rate = 1e-4  # 2e-4 -> 1e-4 (Daha stabil öğrenme)
@@ -33,3 +41,4 @@ class Config:
         self.model = ModelConfig()
         self.data = DataConfig()
         self.training = TrainingConfig()
+        self.text_gen = TextGenConfig()

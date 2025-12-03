@@ -180,9 +180,16 @@ def test_copy_ability(use_memory=False, train_steps=0):
     # Test
     logger.info(f"\nTesting on {num_test} examples...")
 
-    logits = model.apply({'params': params}, test_inputs, train=False)
-    last_logits = logits[:, -1, :]  # (num_test, vocab_size)
-    predictions = jnp.argmax(last_logits, axis=-1)  # (num_test,)
+    # CRITICAL FIX: Process each example independently with its own memory state
+    # Each sequence needs to build up its own associations from scratch
+    predictions = []
+    for i in range(num_test):
+        single_input = test_inputs[i:i+1]  # (1, seq_len)
+        logits_i = model.apply({'params': params}, single_input, train=False)
+        pred_i = jnp.argmax(logits_i[0, -1])  # Get prediction for last token
+        predictions.append(pred_i)
+
+    predictions = jnp.array(predictions)  # (num_test,)
 
     # Calculate accuracy
     correct = jnp.sum(predictions == test_targets)

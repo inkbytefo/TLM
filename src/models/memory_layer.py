@@ -62,11 +62,15 @@ class DeltaMemoryLayer(nn.Module):
         self.W_k = nn.Dense(self.memory_dim, use_bias=False, name='key_proj')
         self.W_v = nn.Dense(self.memory_dim, use_bias=False, name='value_proj')
 
-        # Output projection
+        # Output projection with learnable scale for residual balancing
         self.W_o = nn.Dense(self.hidden_dim, use_bias=True, name='output_proj')
 
-        # Learnable gating for write operations
-        self.gate_proj = nn.Dense(1, use_bias=True, name='gate_proj')
+        # Learnable scale for memory contribution (initialized small)
+        self.scale_param = self.param(
+            'memory_scale',
+            nn.initializers.constant(0.1),  # Start small, let training increase if needed
+            (1,)
+        )
 
         # Learnable beta (learning rate) for memory updates
         self.beta_param = self.param(
@@ -216,29 +220,30 @@ class DeltaMemoryLayer(nn.Module):
         # Compute learning rate (beta) for updates
         beta = self.compute_beta()
 
-        # Compute gating scores (which tokens to write to memory)
-        gate_scores = self.gate_proj(x)  # (B, L, 1)
-        gates = jax.nn.sigmoid(gate_scores).squeeze(-1)  # (B, L)
+        # Get learnable memory scale
+        memory_scale = jnp.abs(self.scale_param[0])  # Ensure positive
 
         def scan_fn(carry, inputs):
-            """Process sequence step by step using Delta Rule."""
+            """
+            Process sequence step by step using Delta Rule.
+
+            KEY FIX: Write FIRST, then read from updated memory.
+            This ensures that at position t, we can recall what was written at position t-1.
+            """
             mem_state = carry
-            query_t, key_t, value_t, gate_t = inputs
+            query_t, key_t, value_t = inputs
 
-            # Read from memory BEFORE update (causal)
-            output_t = self.read_memory(mem_state, query_t)
-
-            # Apply gating to key and value (selective writing)
-            gated_key = key_t * gate_t[..., None]
-            gated_value = value_t * gate_t[..., None]
-
-            # Update memory using Delta Rule
+            # STEP 1: WRITE to memory (update with current key-value)
+            # No gating - let the model learn what to write through backprop
             mem_state = self.update_memory_delta(
                 mem_state,
-                gated_key,
-                gated_value,
+                key_t,      # Raw key (no gating)
+                value_t,    # Raw value (no gating)
                 beta
             )
+
+            # STEP 2: READ from updated memory (causal - uses info from past writes)
+            output_t = self.read_memory(mem_state, query_t)
 
             return mem_state, output_t
 
@@ -249,8 +254,7 @@ class DeltaMemoryLayer(nn.Module):
             (
                 jnp.transpose(queries, (1, 0, 2)),   # (L, B, D_mem)
                 jnp.transpose(keys, (1, 0, 2)),
-                jnp.transpose(values, (1, 0, 2)),
-                jnp.transpose(gates, (1, 0))         # (L, B)
+                jnp.transpose(values, (1, 0, 2))
             )
         )
 
@@ -259,6 +263,9 @@ class DeltaMemoryLayer(nn.Module):
 
         # Project back to hidden dimension
         outputs = self.W_o(outputs)
+
+        # Apply learnable scaling for residual balancing
+        outputs = outputs * memory_scale
 
         # Apply dropout
         outputs = self.dropout(outputs, deterministic=not train)

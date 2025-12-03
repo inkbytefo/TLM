@@ -99,13 +99,14 @@ class SpectralModel(nn.Module):
     num_layers: int
     num_classes: int
     dropout_rate: float
+    encoder_dense_units: int = 128 # Default value
     
     @nn.compact
     def __call__(self, x, train: bool = True):
         # x: (Batch, L_original) -> uint8
         
         # --- 1. Byte-Level Patching Encoder ---
-        x_encoded = ByteLatentEncoder(hidden_dim=self.hidden_dim)(x)
+        x_encoded = ByteLatentEncoder(hidden_dim=self.hidden_dim, encoder_dense_units=self.encoder_dense_units)(x)
         
         # --- 2. Positional Encoding ---
         x_emb = SinusoidalPositionalEncoding(d_model=self.hidden_dim)(x_encoded)

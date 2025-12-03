@@ -24,26 +24,36 @@ class SpectralBlock(nn.Module):
         # 1. Real-to-Complex FFT
         x_hat = fft_transform(x_norm) # Shape: (B, N//2 + 1, D)
         
-        # 2. Spectral Filter Generation
-        # Global context from time domain
-        context = jnp.mean(x_norm, axis=1, keepdims=True)
+        # 2. Spectral Filter (Learnable in Frequency Domain)
+        # We learn complex weights directly: H(f)
+        # Shape: (N//2 + 1, D, D) to allow mixing between hidden dimensions
+        freq_len = x_hat.shape[1]
         
-        filter_signal = nn.Dense(self.hidden_dim * self.mlp_expansion, dtype=self.dtype)(context)
-        filter_signal = nn.gelu(filter_signal)
-        filter_signal = nn.Dense(self.hidden_dim, dtype=self.dtype)(filter_signal)
-        filter_signal = jnp.tanh(filter_signal)
+        w_real = self.param('w_real', nn.initializers.normal(stddev=0.02), 
+                           (freq_len, self.hidden_dim, self.hidden_dim))
+        w_imag = self.param('w_imag', nn.initializers.normal(stddev=0.02), 
+                           (freq_len, self.hidden_dim, self.hidden_dim))
         
-        # Broadcast to time domain then FFT -> This learns a frequency filter implicitly
-        h_time = jnp.tile(filter_signal, (1, seq_len, 1))
-        h_hat = fft_transform(h_time) # Shape: (B, N//2 + 1, D)
+        # 3. Spectral Mixing: Y(f) = X(f) * H(f)
+        # Complex multiplication with matrix mixing:
+        # (a+bi)(c+di) = (ac-bd) + i(ad+bc)
+        # x_hat: (B, S, I)
+        # w: (S, I, O)
         
-        # 3. Spectral Mixing
-        y_hat = x_hat * h_hat
+        # Real part: x.real * w.real - x.imag * w.imag
+        real_part = jnp.einsum('bsi,sio->bso', x_hat.real, w_real) - \
+                    jnp.einsum('bsi,sio->bso', x_hat.imag, w_imag)
+                    
+        # Imag part: x.real * w.imag + x.imag * w.real
+        imag_part = jnp.einsum('bsi,sio->bso', x_hat.real, w_imag) + \
+                    jnp.einsum('bsi,sio->bso', x_hat.imag, w_real)
+                    
+        y_hat = real_part + 1j * imag_part
         
         # 4. Complex-to-Real iFFT
         y = ifft_transform(y_hat, n=seq_len)
         
-        # 5. Energy Gate
+        # 5. Energy Gate (Optional but kept for stability)
         gate = nn.Dense(self.hidden_dim, dtype=self.dtype)(x_norm)
         gate = nn.sigmoid(gate)
         y = y * gate

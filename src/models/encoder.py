@@ -10,6 +10,7 @@ class ByteLatentEncoder(nn.Module):
     Uses a 1D Convolution with stride to reduce sequence length by 4x.
     """
     hidden_dim: int
+    encoder_dense_units: int = 128 # Default value, should be overridden by config
     
     @nn.compact
     def __call__(self, x):
@@ -45,6 +46,11 @@ class ByteLatentEncoder(nn.Module):
             padding='VALID'
         )(x_padded)
         
+        # 3.5 Additional Dense Layer for richer feature extraction
+        x_patched = nn.Dense(self.encoder_dense_units)(x_patched)
+        x_patched = nn.gelu(x_patched)
+        x_patched = nn.Dense(self.hidden_dim)(x_patched) # Project back to hidden_dim
+
         # 4. Normalization
         x_out = nn.LayerNorm()(x_patched)
         

@@ -3,6 +3,7 @@ class ModelConfig:
     hidden_dim = 256    # 128 -> 256 (Kapasite artışı)
     num_layers = 6      # 4 -> 6 (Derinlik artışı)
     dropout_rate = 0.2  # 0.1 -> 0.2 (Overfitting önlemi)
+    encoder_dense_units = 128 # YENİ: Encoder dense layer boyutu
 
 class DataConfig:
     task_name = 'text_modeling' # 'lra_listops' or 'text_modeling'
@@ -18,6 +19,7 @@ class TextDataConfig:
 class TrainingConfig:
     learning_rate = 1e-4  # 2e-4 -> 1e-4 (Daha stabil öğrenme)
     weight_decay = 0.1    # 0.01 -> 0.1 (Güçlü regülarizasyon)
+    gradient_clip_value = 1.0 # YENİ: Gradyan kırpma eşiği
     warmup_steps = 2000
     num_steps = 20000
     eval_every = 200

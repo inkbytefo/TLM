@@ -27,7 +27,7 @@ def create_train_state(rng, config):
     )
     
     tx = optax.chain(
-        optax.clip_by_global_norm(1.0),
+        optax.clip_by_global_norm(config.training.gradient_clip_value),
         optax.adamw(learning_rate=schedule, weight_decay=config.training.weight_decay)
     )
     

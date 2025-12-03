@@ -5,6 +5,13 @@ class ModelConfig:
     dropout_rate = 0.2  # 0.1 -> 0.2 (Overfitting önlemi)
     encoder_dense_units = 128 # YENİ: Encoder dense layer boyutu
 
+    # Memory Layer Configuration (Spectral-Associative Hybrid)
+    use_memory = False  # Enable dynamic associative memory
+    memory_dim = 64  # Memory compression dimension (smaller = more compression)
+    memory_interval = 2  # Insert memory layer every N spectral layers
+    decay_min = 0.9  # Minimum memory decay (0=forget fast, 1=never forget)
+    decay_max = 0.999  # Maximum memory decay
+
 class DataConfig:
     task_name = 'text_modeling' # 'lra_listops' or 'text_modeling'
     seq_len = 2048      # Byte-Level için artırıldı

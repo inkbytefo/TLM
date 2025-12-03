@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from .encoder import ByteLatentEncoder
+from .memory_layer import ResidualMemoryBlock
 
 class SpectralLayer(nn.Module):
     hidden_dim: int
@@ -94,29 +95,46 @@ class AttentionPooling(nn.Module):
         return context
 
 class SpectralModel(nn.Module):
-    vocab_size: int 
+    vocab_size: int
     hidden_dim: int
     num_layers: int
     num_classes: int
     dropout_rate: float
     encoder_dense_units: int = 128 # Default value
-    
+    use_memory: bool = False  # Enable memory layers
+    memory_dim: int = 64  # Memory dimension
+    memory_interval: int = 2  # Insert memory layer every N spectral layers
+
     @nn.compact
     def __call__(self, x, train: bool = True):
         # x: (Batch, L_original) -> uint8
-        
+
         # --- 1. Byte-Level Patching Encoder ---
         x_encoded = ByteLatentEncoder(hidden_dim=self.hidden_dim, encoder_dense_units=self.encoder_dense_units)(x)
-        
+
         # --- 2. Positional Encoding ---
         x_emb = SinusoidalPositionalEncoding(d_model=self.hidden_dim)(x_encoded)
         x_emb = nn.Dropout(rate=self.dropout_rate)(x_emb, deterministic=not train)
-        
-        # --- 3. Spectral Layers ---
+
+        # --- 3. Hybrid Spectral-Memory Layers ---
         curr_x = x_emb
-        for _ in range(self.num_layers):
-            curr_x = SpectralLayer(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(curr_x, train=train)
-            
+        memory_state = None  # Will be initialized by first memory layer
+
+        for layer_idx in range(self.num_layers):
+            # Spectral processing
+            curr_x = SpectralLayer(
+                hidden_dim=self.hidden_dim,
+                dropout_rate=self.dropout_rate
+            )(curr_x, train=train)
+
+            # Interleaved memory layer
+            if self.use_memory and (layer_idx + 1) % self.memory_interval == 0:
+                curr_x, memory_state = ResidualMemoryBlock(
+                    hidden_dim=self.hidden_dim,
+                    memory_dim=self.memory_dim,
+                    dropout_rate=self.dropout_rate
+                )(curr_x, memory_state, train=train)
+
         curr_x = nn.LayerNorm()(curr_x)
         
         # --- 4. Pooling & Classification ---

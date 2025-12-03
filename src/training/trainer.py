@@ -39,11 +39,19 @@ def create_generative_train_state(rng, config):
     """
     Creates TrainState for SpectralGPT (Generative).
     """
+    # Get memory config if available
+    use_memory = getattr(config.model, 'use_memory', False)
+    memory_dim = getattr(config.model, 'memory_dim', 64)
+    memory_interval = getattr(config.model, 'memory_interval', 2)
+
     model = SpectralGPT(
         vocab_size=config.model.vocab_size,
         hidden_dim=config.model.hidden_dim,
         num_layers=config.model.num_layers,
-        dropout_rate=config.model.dropout_rate
+        dropout_rate=config.model.dropout_rate,
+        use_memory=use_memory,
+        memory_dim=memory_dim,
+        memory_interval=memory_interval
     )
     
     # Dummy input: (1, SeqLen)

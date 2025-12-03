@@ -40,6 +40,9 @@ def main():
     seq_len = getattr(config.data, 'imdb_seq_len', 1024)
     batch_size = config.data.batch_size
     
+    # Update config.data.seq_len to match IMDB seq_len for correct model initialization
+    config.data.seq_len = seq_len
+    
     logger.info(f"Sequence Length: {seq_len}")
 
     # Load Data

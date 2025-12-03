@@ -24,6 +24,7 @@ def main():
 
     # Override config for Text Overfitting
     config.data.task_name = 'text_overfitting'
+    config.training.num_steps = 500 # Reduce steps for overfitting test
     # Use the text file path from config or default to sonnet
     text_file = getattr(config.data, 'text_file_path', 'data/sonnet.txt')
     

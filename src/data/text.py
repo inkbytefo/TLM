@@ -80,5 +80,4 @@ class TextDataset:
 def get_text_dataloader(file_path, seq_len, batch_size, repeat=True):
     """Helper function to get numpy iterator."""
     ds = TextDataset(file_path, seq_len, batch_size, repeat).get_dataset()
-    import tensorflow_datasets as tfds
-    return iter(tfds.as_numpy(ds))
+    return ds.as_numpy_iterator()

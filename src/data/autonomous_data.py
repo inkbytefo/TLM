@@ -1,4 +1,3 @@
-
 import numpy as np
 import random
 from config import Config, AgentLoopConfig
@@ -8,22 +7,38 @@ class AutonomousDataGenerator:
         self.batch_size = batch_size
         self.seq_len = seq_len
         self.config = Config()
-        self.loop_conf = AgentLoopConfig # Use direct class reference if instance fails
+        self.loop_conf = AgentLoopConfig
         
-        # Simple conversation pairs for training
-        self.conversations = [
-            ("Merhaba", "Merhaba, size nasıl yardımcı olabilirim?"),
-            ("Nasılsın?", "Ben bir yapay zekayım, duygularım yok ama sistemlerim çalışıyor."),
-            ("Python nedir?", "Python yüksek seviyeli bir programlama dilidir."),
-            ("JAX nedir?", "JAX, Google tarafından geliştirilen yüksek performanslı bir kütüphanedir."),
-            ("Test", "Sistem aktif ve dinliyor."),
-            ("1+1 kaç?", "Sonuç 2'dir."),
-            ("Bana bir şiir yaz", "Güller kırmızı, menekşeler mavi..."),
-            ("Kod yaz", "print('Hello World')"),
-        ]
-
+        # Templates for dynamic generation
+        self.greetings = ["Merhaba", "Selam", "Hey", "Nasılsın", "Günaydın"]
+        self.responses = ["Merhaba!", "Selam, dinliyorum.", "İyiyim, sen nasılsın?", "Buyrun?"]
+        
     def encode(self, text):
         return [b for b in text.encode('utf-8')]
+
+    def generate_math_pair(self):
+        """Generates a random math problem and answer."""
+        a = random.randint(1, 100)
+        b = random.randint(1, 100)
+        op = random.choice(['+', '-', '*'])
+        
+        if op == '+': res = a + b
+        elif op == '-': res = a - b
+        elif op == '*': res = a * b
+        
+        questions = [
+            f"{a}{op}{b}",
+            f"{a} {op} {b} kaç?",
+            f"{a} artı {b}",
+            f"Hesapla: {a}{op}{b}"
+        ]
+        answers = [
+            f"{res}",
+            f"Sonuç {res}",
+            f"{res} eder.",
+            f"Cevap: {res}"
+        ]
+        return random.choice(questions), random.choice(answers)
 
     def generate_batch(self):
         """
@@ -38,24 +53,24 @@ class AutonomousDataGenerator:
         SPEAK = self.loop_conf.SPEAK_TOKEN
 
         for _ in range(self.batch_size):
-            # Decide scenario: 
-            # 0: Pure Silence (User silent -> Agent waits)
-            # 1: Interaction (User speaks -> Agent responds)
             scenario = random.random()
-            
             seq = []
             
-            if scenario < 0.3: # 30% Pure Silence
-                # Input: SILENCE, Target: WAIT
-                # We create a sequence where SILENCE is followed by WAIT
-                # [SILENCE, WAIT, SILENCE, WAIT, ...]
+            if scenario < 0.2: # 20% Pure Silence
                 length = self.seq_len
                 for _ in range(length // 2):
                     seq.append(SILENCE)
                     seq.append(WAIT)
                 
-            else: # 70% Conversation
-                user_text, agent_text = random.choice(self.conversations)
+            else: # 80% Interaction
+                # Decide type of interaction
+                if random.random() < 0.5:
+                    # Math/Logic (Dynamic)
+                    user_text, agent_text = self.generate_math_pair()
+                else:
+                    # Chat (Semi-dynamic)
+                    user_text = random.choice(self.greetings)
+                    agent_text = random.choice(self.responses)
                 
                 u_tokens = self.encode(user_text)
                 a_tokens = self.encode(agent_text)
@@ -63,9 +78,9 @@ class AutonomousDataGenerator:
                 # 1. User speaks
                 seq.extend(u_tokens)
                 
-                # 2. Agent Thinks (Optional)
-                if random.random() > 0.5:
-                    seq.append(THINK)
+                # 2. Agent Thinks (Optional but good for structure)
+                # Always add THINK for consistency in this training phase
+                seq.append(THINK)
                 
                 # 3. Agent Speaks
                 seq.append(SPEAK)
@@ -74,14 +89,16 @@ class AutonomousDataGenerator:
                 # 4. Return to Silence/Wait
                 remaining = self.seq_len - len(seq)
                 if remaining > 0:
-                    for _ in range(remaining // 2):
-                        seq.append(SILENCE)
-                        seq.append(WAIT)
+                    # Fill rest with silence/wait pairs
+                    for _ in range(remaining // 2 + 1):
+                        if len(seq) < self.seq_len:
+                            seq.append(SILENCE)
+                        if len(seq) < self.seq_len:
+                            seq.append(WAIT)
             
             # Truncate or Pad
             seq = seq[:self.seq_len]
             
-            # Pad if too short
             if len(seq) < self.seq_len:
                 pad = [0] * (self.seq_len - len(seq))
                 seq.extend(pad)
@@ -96,10 +113,3 @@ def get_autonomous_dataloader(batch_size, seq_len):
     gen = AutonomousDataGenerator(batch_size, seq_len)
     while True:
         yield gen.generate_batch()
-
-if __name__ == "__main__":
-    # Test
-    loader = get_autonomous_dataloader(batch_size=2, seq_len=20)
-    batch = next(loader)
-    print("Batch shape:", batch['input'].shape)
-    print("Sample:", batch['input'][0])

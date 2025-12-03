@@ -1,32 +1,8 @@
 """
+## Developer: inkbytefo
+## Modified: 2025-12-03
 Delta Memory Layer - Error-Correcting Linear Memory for ASI.
-
-This layer implements an error-correcting associative memory that can:
-1. WRITE: Store Key-Value pairs with OVERWRITE capability
-2. READ: Query the memory to retrieve exact information
-3. UPDATE: Correct errors using Delta Rule (like fast gradient descent)
-
-Mathematical Foundation:
-    S_t = S_{t-1} + β * (V - S_{t-1} K) ⊗ K
-
-    Where:
-    - S_{t-1} K: Current prediction from memory
-    - (V - S_{t-1} K): Error/Delta between target and prediction
-    - β: Learning rate for memory updates
-
-This enables:
-- O(N) complexity with infinite context window
-- Exact copying capability (can overwrite old values)
-- No catastrophic forgetting (error-correcting updates)
-
-Based on:
-- Delta Rule (Widrow & Hoff, 1960)
-- Linear Transformers with Delta Rule (Schlag et al., 2021)
-- Fast Weight Programmers (Schlag et al., 2021)
-
-Key Difference from Standard Linear Transformers:
-    Standard: S_t = α * S_{t-1} + K^T V  (Additive, cannot overwrite)
-    Delta:    S_t = S_{t-1} + β * (V - S_{t-1} K) ⊗ K  (Error-correcting, can overwrite)
+Modified: Increased initialization scale and beta range for faster convergence.
 """
 
 import jax
@@ -52,8 +28,8 @@ class DeltaMemoryLayer(nn.Module):
     hidden_dim: int
     memory_dim: int = 64
     dropout_rate: float = 0.1
-    beta_min: float = 0.01   # Learning rate for memory updates
-    beta_max: float = 0.3    # Max learning rate (balanced for adaptive clipping)
+    beta_min: float = 0.1    # Artırıldı: 0.01 -> 0.1 (Daha hızlı update)
+    beta_max: float = 0.9    # Artırıldı: 0.3 -> 0.9 (Daha agresif update)
 
     def setup(self):
         """Initialize learnable parameters."""
@@ -65,17 +41,18 @@ class DeltaMemoryLayer(nn.Module):
         # Output projection with learnable scale for residual balancing
         self.W_o = nn.Dense(self.hidden_dim, use_bias=True, name='output_proj')
 
-        # Learnable scale for memory contribution (initialized small)
+        # Learnable scale for memory contribution
+        # KRİTİK DEĞİŞİKLİK: 0.1 -> 1.0 (Hafıza artık başlangıçta tam etkili)
         self.scale_param = self.param(
             'memory_scale',
-            nn.initializers.constant(0.1),  # Start small, let training increase if needed
+            nn.initializers.constant(1.0),
             (1,)
         )
 
         # Learnable beta (learning rate) for memory updates
         self.beta_param = self.param(
             'beta',
-            nn.initializers.constant(0.5),  # Initialize to middle value
+            nn.initializers.constant(0.0),  # Sigmoid(0) = 0.5 -> Ortadan başla
             (1,)
         )
 
@@ -151,8 +128,8 @@ class DeltaMemoryLayer(nn.Module):
         # Compute Frobenius norm of update matrix for each batch
         update_norm = jnp.linalg.norm(update, axis=(1, 2), keepdims=True)  # (B, 1, 1)
 
-        # Clip threshold (tuned for stability without losing signal)
-        clip_threshold = 10.0
+        # Clip threshold (relaxed for better gradient flow)
+        clip_threshold = 50.0  # Artırıldı: 10.0 -> 50.0
 
         # Only clip if norm exceeds threshold
         # If update_norm <= clip_threshold: scale_factor = 1 (no change)

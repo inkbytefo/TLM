@@ -2,21 +2,38 @@
 
 **Spectral-JAX: Byte-Level Transformer with Error-Correcting Memory**
 
-Version: 2.0
-Last Updated: December 2024
+Version: 2.1
+Last Updated: 2025-12-03
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Core Architecture](#core-architecture)
-3. [Model Variants](#model-variants)
-4. [Key Components](#key-components)
-5. [Mathematical Foundations](#mathematical-foundations)
-6. [Performance Characteristics](#performance-characteristics)
+2. [Project Vision](#project-vision)
+3. [Core Architecture](#core-architecture)
+4. [Model Variants](#model-variants)
+5. [Key Components](#key-components)
+6. [Data Pipelines](#data-pipelines)
+7. [Training & Evaluation](#training--evaluation)
+8. [Agent & Tools](#agent--tools)
+9. [RAG Memory](#rag-memory)
+10. [Mathematical Foundations](#mathematical-foundations)
+11. [Performance Characteristics](#performance-characteristics)
+12. [Configuration](#configuration)
+13. [Directory Map](#directory-map)
 
 ---
+
+## Project Vision
+
+TLM targets a universal, efficient, and reliable sequence learner for software, natural language, and structured data:
+
+- Universal ingestion via byte-level modeling (no tokenizers, multi-language, code-friendly)
+- Efficient global mixing using spectral operators (O(N log N))
+- Precise recall with error-correcting associative memory for exact copying and lookups
+- Tool-using agents that execute code safely and incorporate results into generation
+- Modular design that scales across classification, generation, and retrieval-augmented tasks
 
 ## Overview
 
@@ -155,6 +172,60 @@ Output Head → Logits (vocab_size)
 - RAG-augmented generation: Document Q&A
 
 **Training Scripts**: `run_gpt_text.py`, `run_agent_train.py`
+
+---
+## Data Pipelines
+
+The project provides multiple byte/char-level data loaders and generators:
+
+- `src/data/text.py`: Byte-level dataset class backed by `tf.data` with chunking and optional repeat; yields `{'input': seq, 'label': seq_shifted}`.
+- `src/data/text_generation.py`: Utilities to load raw text, build vocab at character-level, and yield train/val iterators; used by `run_gpt_text.py`.
+- `src/data/imdb.py`: TFDS-based IMDB reviews loader; converts strings to bytes (`tf.io.decode_raw`), pads/truncates to `seq_len`, returns numpy iterators.
+- `src/data/lra.py`: ListOps data download and byte-level tokenization with header-aware parsing; supports train/validation loaders.
+- `src/data/agent_data.py`: Synthetic agent dataset generator producing SORU/DÜŞÜNCE/EYLEM/SONUÇ/CEVAP patterns with `<EXEC>` tags.
+
+These loaders standardize inputs to integer tensors in `[0,255]` for byte-level processing, aligning with `vocab_size=256` in the models.
+
+---
+
+## Training & Evaluation
+
+Training utilities are implemented in `src/training`:
+
+- `src/training/trainer.py`: `create_train_state` for `SpectralModel`, `create_generative_train_state` for `SpectralGPT`, plus JIT-compiled steps with gradient accumulation.
+- `src/training/evaluator.py`: `eval_step` and `eval_step_generative` compute loss and accuracy for classification and generation.
+
+Entry scripts:
+
+- `run_lra.py`: Trains `SpectralModel` on LRA ListOps with checkpoints (latest/best) and logging.
+- `run_gpt_text.py`: Character-level text generation training with sampling, validation, and checkpointing.
+- `run_imdb.py`: IMDB sentiment classification (byte-level) pipeline.
+- `agent_generate.py`, `run_agent_train.py`, `test_agent.py`: Agent training and evaluation flows.
+
+---
+
+## Agent & Tools
+
+Agents are trained to detect and use tool tags to execute Python code and incorporate outputs:
+
+- Execution tags: `<EXEC>...code...</EXEC>` embedded in generated text.
+- `src/tools/executor.py`: Safe executor with timeouts, output capture, and error reporting; exposes `execute_code` and `extract_code_from_exec_tags`.
+- Agent dataset: Generated via `src/data/agent_data.py` with arithmetic, math functions, and list operations.
+
+Testing and usage:
+
+- `test_agent.py`: Validates multi-problem agent behavior and result detection.
+- `agent_generate.py`: Quick sampling with prompts to inspect `<EXEC>` usage.
+
+---
+
+## RAG Memory
+
+Retrieval-Augmented Generation integrates external context into prompts:
+
+- `src/memory/rag.py`: In-memory `VectorStore` with simple embeddings (character n-grams), cosine similarity search, and JSON persistence.
+- API: `add_document(s)`, `search(query, top_k, min_similarity)`, and `rag_augmented_prompt(query, store, top_k)`.
+- Example usage included in the module’s `__main__` and documented in `docs/MEMORY_VALIDATION_GUIDE.md`.
 
 ---
 
@@ -507,6 +578,41 @@ N=4096: 5.8GB VRAM (requires mixed precision)
 
 ---
 
+## Configuration
+
+Central configuration lives in `config.py`:
+
+- `ModelConfig`: `vocab_size`, `hidden_dim`, `num_layers`, `dropout_rate`, `encoder_dense_units`, and memory toggles (`use_memory`, `memory_dim`, `memory_interval`).
+- `DataConfig`: Task selection (`text_modeling`, `lra_listops`), `seq_len`, `batch_size`, and dataset paths.
+- `TextGenConfig`: Dataset path, sequence length, batch size, steps, and accumulation settings for generative training.
+- `AgentConfig`: Agent-specific generation and execution parameters (tool tags, timeouts, max iterations) and dataset path.
+- `TrainingConfig`: Learning rate, weight decay, gradient clip, warmup, steps, seed, accumulation, and optional label smoothing.
+
+Adjust these to switch tasks and enable/disable memory interleaving.
+
+---
+
+## Directory Map
+
+| Area | Path |
+|------|------|
+| Models (Encoder/Decoder/Blocks) | `src/models/*.py` |
+| Memory (RAG) | `src/memory/*.py` |
+| Data loaders & generators | `src/data/*.py` |
+| Training loops & eval | `src/training/*.py` |
+| Agent tools & executor | `src/tools/*.py` |
+| Utilities (logging, FFT) | `src/utils/*.py` |
+| Entry scripts | `main.py`, `run_*.py`, `generate.py` |
+| Tests | `tests/*.py`, `test_*.py` |
+| Docs | `docs/*.md` |
+
+Related docs:
+
+- `docs/AGENT_TRAINING_GUIDE.md`: Agent training and evaluation workflow.
+- `docs/MEMORY_VALIDATION_GUIDE.md`: Memory validation tasks including RAG usage.
+
+---
+
 ## Design Rationale
 
 ### Why Byte-Level?
@@ -635,11 +741,16 @@ Output: "5" ✓ (with attention, sometimes fails)
 | HyenaBlock | `src/models/hyena_block.py` |
 | DeltaMemoryLayer | `src/models/memory_layer.py` |
 | Training Loops | `src/training/trainer.py` |
+| Evaluators | `src/training/evaluator.py` |
 | Data Loaders | `src/data/*.py` |
+| Tools Executor | `src/tools/executor.py` |
+| Memory (RAG) | `src/memory/rag.py` |
 | Configuration | `config.py` |
 
 ---
 
-**For detailed API documentation, see [API.md](API.md)**
-**For training guides, see [TRAINING.md](TRAINING.md)**
-**For agent documentation, see [AGENTS.md](AGENTS.md)**
+**See `docs/AGENT_TRAINING_GUIDE.md` and `docs/MEMORY_VALIDATION_GUIDE.md` for task-specific details.**
+# TLM Architecture Documentation
+## Developer: inkbytefo
+## Modified: 2025-12-03
+# TLM Architecture Documentation

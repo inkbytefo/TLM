@@ -210,23 +210,22 @@ class DeltaMemoryLayer(nn.Module):
             """
             Process sequence step by step using Delta Rule.
 
-            KEY FIX: Write FIRST, then read from updated memory.
-            This ensures that at position t, we can recall what was written at position t-1.
+            CRITICAL FIX: READ BEFORE WRITE - This ensures memory can store and retrieve past information.
+            Model first reads from current memory state (past knowledge), then updates with new key-value.
             """
             mem_state = carry
             query_t, key_t, value_t = inputs
 
-            # STEP 1: WRITE to memory (update with current key-value)
-            # No gating - let the model learn what to write through backprop
+            # STEP 1: READ from CURRENT memory state (using info from t-1)
+            output_t = self.read_memory(mem_state, query_t)
+
+            # STEP 2: UPDATE memory state (store info for t+1)
             mem_state = self.update_memory_delta(
                 mem_state,
                 key_t,      # Raw key (no gating)
                 value_t,    # Raw value (no gating)
                 beta
             )
-
-            # STEP 2: READ from updated memory (causal - uses info from past writes)
-            output_t = self.read_memory(mem_state, query_t)
 
             return mem_state, output_t
 

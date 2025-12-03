@@ -178,28 +178,41 @@ def agent_generate(
                     print(f">>> RUNNING...")
 
                 # Execute code
-                try:
-                    result = execute_code(code, timeout=5)
+                result = execute_code(code, timeout=5)
+
+                # Check if execution resulted in an error
+                if result.startswith("ERROR:"):
+                    if verbose:
+                        print(f">>> EXECUTION ERROR:")
+                        print(f"{result}")
+                        print(f"\n⚠ Feeding error back to model for correction...")
+
+                    # Feed error back to model for self-correction
+                    # Format: SONUÇ: HATA: {error_message}
+                    result_text = f"\nSONUÇ: {result}\nDÜŞÜNCE: "
+                    current_text += result_text
+                    current_indices = encode_text(current_text, char_to_idx)
+
+                    if verbose:
+                        print(f"Continuing with error feedback for model to self-correct...")
+                else:
+                    # Success case
                     if verbose:
                         print(f">>> RESULT:")
                         print(f"{result}")
-                except Exception as e:
-                    result = f"ERROR: {str(e)}"
+
+                    # Append successful result
+                    result_text = f"\nSONUÇ: {result.strip()}\nCEVAP: "
+                    current_text += result_text
+                    current_indices = encode_text(current_text, char_to_idx)
+
                     if verbose:
-                        print(f">>> ERROR:")
-                        print(f"{result}")
-
-                # Append result to current text
-                result_text = f"\nSONUÇ: {result.strip()}\nCEVAP: "
-                current_text += result_text
-                current_indices = encode_text(current_text, char_to_idx)
-
-                if verbose:
-                    print(f"\nContinuing generation after execution...")
+                        print(f"\nContinuing generation after successful execution...")
             else:
                 if verbose:
-                    print(f"Warning: Found {tool_end_token} but could not extract code")
-                break
+                    print(f"⚠ Warning: Found {tool_end_token} but could not extract code")
+                    print(f"Continuing generation...")
+                # Don't break - let model continue generating
         else:
             # No execution tag found, we're done
             if verbose:

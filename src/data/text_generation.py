@@ -53,7 +53,8 @@ def decode_text(indices: np.ndarray, idx_to_char: dict) -> str:
     Returns:
         Decoded text string
     """
-    return ''.join([idx_to_char[int(i)] for i in indices])
+    # Handle out-of-vocabulary indices gracefully
+    return ''.join([idx_to_char.get(int(i), '?') for i in indices])
 
 class TextGenerationDataLoader:
     """

@@ -13,6 +13,7 @@ from config import Config
 from src.utils.common import setup_logger, set_seed
 from src.training.trainer import create_generative_train_state
 from src.tools.executor import execute_code, extract_code_from_exec_tags
+from src.memory.rag import VectorStore
 
 # Prevent TensorFlow from grabbing GPU memory
 import tensorflow as tf
@@ -60,6 +61,35 @@ def encode_text(text, char_to_idx):
     return [char_to_idx.get(ch, 0) for ch in text]
 
 
+def extract_search_query(text, start_token="<SEARCH>", end_token="</SEARCH>"):
+    """
+    Extract search query from text between <SEARCH> tags.
+
+    Args:
+        text: Full text containing search tags
+        start_token: Start tag for search
+        end_token: End tag for search
+
+    Returns:
+        Search query string or None if not found
+    """
+    try:
+        start_idx = text.rfind(start_token)  # Last occurrence
+        if start_idx == -1:
+            return None
+
+        start_idx += len(start_token)
+        end_idx = text.find(end_token, start_idx)
+
+        if end_idx == -1:
+            return None
+
+        query = text[start_idx:end_idx].strip()
+        return query if query else None
+    except Exception:
+        return None
+
+
 def agent_generate(
     state,
     prompt,
@@ -72,16 +102,21 @@ def agent_generate(
     max_len=2048,
     tool_start_token="<EXEC>",
     tool_end_token="</EXEC>",
+    search_start_token="<SEARCH>",
+    search_end_token="</SEARCH>",
+    vector_store=None,
+    top_k_search=3,
     verbose=True
 ):
     """
-    Agent generation with stop-and-go tool execution.
+    Agent generation with stop-and-go tool execution and RAG search.
 
     Algorithm:
-        1. Generate text until </EXEC> token or max_tokens
+        1. Generate text until </EXEC>, </SEARCH>, or max_tokens
         2. If </EXEC> found, extract and execute code
-        3. Append result to prompt and continue generation
-        4. Repeat until max_iterations or no more </EXEC> tokens
+        3. If </SEARCH> found, retrieve from vector store
+        4. Append result to prompt and continue generation
+        5. Repeat until max_iterations or no more tool tokens
 
     Args:
         state: Training state with model
@@ -95,6 +130,10 @@ def agent_generate(
         max_len: Maximum sequence length
         tool_start_token: Start token for code execution
         tool_end_token: End token for code execution
+        search_start_token: Start token for RAG search
+        search_end_token: End token for RAG search
+        vector_store: Optional VectorStore for RAG retrieval
+        top_k_search: Number of documents to retrieve
         verbose: Whether to print progress
 
     Returns:
@@ -150,12 +189,13 @@ def agent_generate(
             token_id = int(next_token[0])
             generated_tokens.append(token_id)
 
-            # Decode to check for end tag
+            # Decode to check for end tags (tool or search)
             current_generated = decode_indices(generated_tokens, idx_to_char)
-            if tool_end_token in current_generated:
+            if tool_end_token in current_generated or search_end_token in current_generated:
                 found_end_tag = True
                 if verbose:
-                    print(f"Found {tool_end_token} at token {i}")
+                    tag = tool_end_token if tool_end_token in current_generated else search_end_token
+                    print(f"Found {tag} at token {i}")
                 break
 
         # Decode generated text
@@ -166,8 +206,8 @@ def agent_generate(
             print(f"\nGenerated ({len(generated_tokens)} tokens):")
             print(f"{generated_text}")
 
-        # Check if we found execution tags
-        if found_end_tag and tool_start_token in current_text:
+        # Check if we found tool execution tags
+        if found_end_tag and tool_start_token in current_text and tool_end_token in current_text:
             # Extract code
             code = extract_code_from_exec_tags(current_text, tool_start_token, tool_end_token)
 
@@ -213,10 +253,71 @@ def agent_generate(
                     print(f"⚠ Warning: Found {tool_end_token} but could not extract code")
                     print(f"Continuing generation...")
                 # Don't break - let model continue generating
+
+        # Check if we found search tags
+        elif found_end_tag and search_start_token in current_text and search_end_token in current_text:
+            # Extract search query
+            query = extract_search_query(current_text, search_start_token, search_end_token)
+
+            if query and vector_store is not None:
+                if verbose:
+                    print(f"\n>>> SEARCHING KNOWLEDGE BASE:")
+                    print(f"Query: {query}")
+                    print(f">>> RETRIEVING...")
+
+                # Search vector store
+                try:
+                    results = vector_store.search_with_scores(query, top_k=top_k_search)
+
+                    if results:
+                        if verbose:
+                            print(f">>> RETRIEVED {len(results)} DOCUMENTS:")
+                            for i, (doc, score) in enumerate(results):
+                                print(f"\n{i+1}. [Similarity: {score:.3f}]")
+                                print(f"   {doc.text[:100]}...")
+
+                        # Format results as context
+                        context_parts = []
+                        for i, (doc, score) in enumerate(results):
+                            context_parts.append(f"[Kaynak {i+1}] {doc.text}")
+
+                        context = "\n".join(context_parts)
+
+                        # Append context to current text
+                        result_text = f"\nBULUNAN BİLGİ:\n{context}\n\nCEVAP: "
+                        current_text += result_text
+                        current_indices = encode_text(current_text, char_to_idx)
+
+                        if verbose:
+                            print(f"\nContinuing generation with retrieved context...")
+                    else:
+                        if verbose:
+                            print(f">>> No relevant documents found")
+                        # Continue without context
+                        result_text = f"\nBULUNAN BİLGİ: İlgili bilgi bulunamadı.\n\nCEVAP: "
+                        current_text += result_text
+                        current_indices = encode_text(current_text, char_to_idx)
+
+                except Exception as e:
+                    if verbose:
+                        print(f">>> SEARCH ERROR: {e}")
+                    # Continue without context
+                    result_text = f"\nBULUNAN BİLGİ: Arama hatası.\n\nCEVAP: "
+                    current_text += result_text
+                    current_indices = encode_text(current_text, char_to_idx)
+            else:
+                if verbose:
+                    if not query:
+                        print(f"⚠ Warning: Found {search_end_token} but could not extract query")
+                    elif vector_store is None:
+                        print(f"⚠ Warning: Search requested but no vector store provided")
+                    print(f"Continuing generation...")
+                # Don't break - let model continue generating
+
         else:
-            # No execution tag found, we're done
+            # No tool tags found, we're done
             if verbose:
-                print(f"\nNo {tool_end_token} found. Generation complete.")
+                print(f"\nNo tool tags found. Generation complete.")
             break
 
     if verbose:
@@ -282,10 +383,22 @@ def main():
         logger.warning(f"Could not restore checkpoint: {e}")
         logger.warning("Using randomly initialized model for demonstration")
 
+    # Create a sample knowledge base for RAG testing
+    knowledge_store = VectorStore()
+    knowledge_store.add_documents([
+        "Python is a high-level programming language created by Guido van Rossum.",
+        "JAX is a numerical computing library for high-performance machine learning research.",
+        "Factorial of n (n!) is the product of all positive integers less than or equal to n.",
+        "The factorial function grows very rapidly. For example, 10! = 3,628,800.",
+        "Matrix multiplication is a binary operation that produces a matrix from two matrices.",
+        "Neural networks are computing systems inspired by biological neural networks.",
+    ])
+    logger.info(f"✓ Created knowledge base with {knowledge_store.size()} documents")
+
     # Test prompts
     test_prompts = [
         "SORU: 345 * 982 nedir?\nDÜŞÜNCE: Bu bir çarpma işlemi. Python kullanarak hesaplayacağım.\nEYLEM: ",
-        "SORU: 25 faktöriyel kaçtır?\nDÜŞÜNCE: Faktöriyel hesaplamak için math modülünü kullanacağım.\nEYLEM: ",
+        "SORU: Faktöriyel nedir?\nDÜŞÜNCE: Bilgi tabanından faktöriyel hakkında bilgi arayacağım.\nARAMA: <SEARCH>factorial definition</SEARCH>",
     ]
 
     for i, prompt in enumerate(test_prompts):
@@ -306,6 +419,8 @@ def main():
             temperature=0.7,
             tool_start_token=tool_start_token,
             tool_end_token=tool_end_token,
+            vector_store=knowledge_store,
+            top_k_search=2,
             verbose=True
         )
 

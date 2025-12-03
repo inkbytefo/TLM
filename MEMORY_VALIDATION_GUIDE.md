@@ -225,29 +225,80 @@ diff results_no_memory.txt results_with_memory.txt
 
 ---
 
-### 7.6: RAG Integration (Optional)
+### 7.5: RAG Integration ✓
 
-**Görev**: Agent'a RAG capability ekle.
+**Amaç**: Agent'ın dış bilgi kaynağından (VectorStore) bilgi çekmesini sağlamak.
 
-**Değişiklikler**:
-1. `agent_generate.py`'ye `store` parametresi ekle
-2. Her prompt'tan önce RAG augmentation yap
-3. Context'i `BAĞLAM:` tagı ile ekle
+**Yapılan Değişiklikler**:
 
-**Örnek**:
+1. **`agent_generate.py` Güncellemesi**:
+   - `vector_store` parametresi eklendi
+   - `<SEARCH>query</SEARCH>` tag desteği
+   - `extract_search_query()` fonksiyonu
+   - Search detection ve execution logic
+
+2. **Yeni Özellikler**:
+   - Model `<SEARCH>` ürettiğinde otomatik retrieval
+   - Top-k similarity search
+   - Context formatting: `BULUNAN BİLGİ: [Kaynak 1] ... [Kaynak 2] ...`
+   - Error handling (no store, no results, search errors)
+
+3. **Test Script**: `test_rag_agent.py`
+   - 30 dokümanlık knowledge base
+   - 5 test case (Python, JAX, Factorial, Algorithm, Neural Network)
+   - Keyword-based success evaluation
+
+**Kullanım**:
 ```python
-def agent_generate_with_rag(
-    state,
-    prompt,
-    store: VectorStore,  # NEW
-    ...
-):
-    # Augment prompt with RAG context
-    augmented_prompt = rag_augmented_prompt(prompt, store, top_k=3)
+from src.memory.rag import VectorStore
 
-    # Continue with normal generation
+# Create knowledge base
+store = VectorStore()
+store.add_documents([
+    "Python is a programming language...",
+    "JAX is a numerical computing library...",
+    "Factorial is the product..."
+])
+
+# Agent generation with RAG
+result = agent_generate(
+    state=state,
+    prompt="SORU: JAX nedir?\nARAMA: <SEARCH>JAX</SEARCH>",
+    vector_store=store,  # Enable RAG
+    top_k_search=2,
     ...
+)
 ```
+
+**Örnek Çıktı**:
+```
+>>> SEARCHING KNOWLEDGE BASE:
+Query: JAX machine learning
+>>> RETRIEVING...
+>>> RETRIEVED 2 DOCUMENTS:
+
+1. [Similarity: 0.876]
+   JAX is a numerical computing library for high-performance...
+
+2. [Similarity: 0.654]
+   JAX provides automatic differentiation...
+
+BULUNAN BİLGİ:
+[Kaynak 1] JAX is a numerical computing library...
+[Kaynak 2] JAX provides automatic differentiation...
+
+CEVAP: JAX, yüksek performanslı makine öğrenimi...
+```
+
+**Test**:
+```bash
+python test_rag_agent.py
+```
+
+**Beklenen Sonuçlar**:
+- Without training: 0-20% success (random generation)
+- With training: 60-80% success (proper RAG usage)
+- Keywords found: ≥2 per test case
 
 ---
 
@@ -256,8 +307,9 @@ def agent_generate_with_rag(
 ```
 TLM/
 ├── test_memory.py              # Memory validation (NEW)
-├── agent_generate.py           # Agent generation with error correction (UPDATED)
-├── MEMORY_VALIDATION_GUIDE.md  # This file (NEW)
+├── test_rag_agent.py           # RAG integration test (NEW)
+├── agent_generate.py           # Agent with error correction + RAG (UPDATED)
+├── MEMORY_VALIDATION_GUIDE.md  # This file (UPDATED)
 ├── src/
 │   ├── models/
 │   │   └── memory_layer.py     # GatedLinearMemory implementation
@@ -267,6 +319,13 @@ TLM/
 └── checkpoints/
     └── agent_model/            # Agent training checkpoints
 ```
+
+**Dosya Büyüklükleri**:
+- `test_memory.py`: 256 lines (associative recall tests)
+- `test_rag_agent.py`: 350 lines (RAG integration tests)
+- `agent_generate.py`: 429 lines (agent loop with tools + RAG)
+- `src/memory/rag.py`: 450 lines (VectorStore implementation)
+- `MEMORY_VALIDATION_GUIDE.md`: 350+ lines (comprehensive guide)
 
 ---
 

@@ -147,9 +147,17 @@ def test_copy_ability(use_memory=False, train_steps=0):
             batch_inputs = train_inputs[indices]
             batch_targets = train_targets[indices]
 
+            # Split RNG for this step
+            rng, dropout_rng = jax.random.split(rng)
+
             # Forward + backward
             def loss_fn(params):
-                logits = model.apply({'params': params}, batch_inputs, train=True)
+                logits = model.apply(
+                    {'params': params},
+                    batch_inputs,
+                    train=True,
+                    rngs={'dropout': dropout_rng}
+                )
                 # Get logits for last position (where answer should be)
                 last_logits = logits[:, -1, :]
                 loss = optax.softmax_cross_entropy_with_integer_labels(

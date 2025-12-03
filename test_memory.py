@@ -1,9 +1,13 @@
 """
 Memory Layer Copy Task Test.
-Tests the associative recall capability of GatedLinearMemory.
+Tests the associative recall capability of DeltaMemoryLayer (Error-Correcting).
 
 Task: Given key-value pairs, retrieve the correct value for a query key.
 Example: "a:10 b:20 c:30 a:?" -> "10"
+
+This test validates the Delta Rule's ability to OVERWRITE memory:
+- If "a:10" is written, then "a:20" is written, the memory should contain "a:20"
+- This solves the Catastrophic Forgetting problem in continual learning
 """
 
 import jax

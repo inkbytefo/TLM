@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from src.models.hyena_block import HyenaBlock
-from src.models.memory_layer import ResidualMemoryBlock
+from src.models.memory_layer import ResidualMemoryBlock  # Uses DeltaMemoryLayer internally
 
 class SpectralGPT(nn.Module):
     """

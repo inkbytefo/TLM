@@ -17,8 +17,6 @@ class SpectralGPT(nn.Module):
     dropout_rate: float = 0.1
     use_memory: bool = False
     memory_dim: int = 64
-    use_memory: bool = False
-    memory_dim: int = 64
     memory_interval: int = 2
     dtype: Any = jnp.float32
     
@@ -81,7 +79,6 @@ class SpectralGPT(nn.Module):
                 attn_out = nn.remat(SlidingWindowAttention, static_argnums=(2,))(
                     hidden_dim=self.hidden_dim,
                     num_heads=8,
-                    window_size=512, # Can be parameterized if needed
                     window_size=512, # Can be parameterized if needed
                     dropout_rate=self.dropout_rate,
                     dtype=self.dtype

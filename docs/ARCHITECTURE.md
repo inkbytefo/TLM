@@ -9,9 +9,15 @@ This document details the internal architecture of the Spectral-JAX framework, f
 ### Key Components
 
 1.  **Hyena Blocks**:
-    *   Replaces Multi-Head Attention.
+    *   Replaces Multi-Head Attention for the majority of layers.
     *   Uses implicit convolutions and gating mechanisms to mix information across the sequence.
     *   Provides sub-quadratic complexity with respect to sequence length.
+
+2.  **Sliding Window Attention (Hybrid)**:
+    *   Interleaved every **6 Hyena layers**.
+    *   Standard Multi-Head Attention with a causal sliding window mask.
+    *   Provides "needle-in-a-haystack" retrieval capabilities that pure signal processing models sometimes lack.
+    *   Ensures the model can focus intensely on local details while Hyena handles the global context.
 
 2.  **Residual Memory Blocks**:
     *   Interleaved with Hyena blocks.

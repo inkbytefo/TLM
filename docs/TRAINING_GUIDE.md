@@ -17,12 +17,19 @@ We follow a 3-Phase Curriculum to build ASI, leveraging Turkish morphology as a 
 ### Phase 1: Morphological Foundation (The "Logic" Phase)
 *   **Goal**: Learn strict compositional logic via agglutinative morphology.
 *   **Data**: 80% High-Quality Turkish (Academic/Literature), 20% Code.
-*   **Command**:
+*   **Command (Hybrid Architecture)**:
     ```bash
     python train.py \
+        --run_name phase1_hybrid_logic \
         --data_paths data/turkish_academic.txt,data/github_code.txt \
         --data_weights 0.8,0.2 \
-        ...
+        --hidden_dim 256 \
+        --num_layers 12 \
+        --seq_len 1024 \
+        --batch_size 8 \
+        --accum_steps 8 \
+        --lr 3e-4 \
+        --steps 50000
     ```
 
 ### Phase 2: World Knowledge (The "Expansion" Phase)
@@ -90,8 +97,3 @@ To reach ASI capabilities, follow this roadmap:
 
 *   **OOM (Out of Memory)**: Reduce `--batch_size` and increase `--accum_steps` to keep the effective batch size constant.
 *   **NaN Loss**: Reduce `--lr` (Learning Rate) or increase `warmup_steps`.
-
-
----
-
-python train.py --run_name phase1_logic --data_paths data/turkish_academic.txt,data/github_code.txt --data_weights 0.8,0.2 --seq_len 1024 --batch_size 8 --accum_steps 8

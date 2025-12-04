@@ -29,16 +29,16 @@ def main():
     try:
         print("\n[Phase 1] Downloading Turkish Wikipedia (wikimedia/wikipedia)...")
         # New standard wikipedia dataset
-        ds = load_dataset("wikimedia/wikipedia", "20231101.tr", split="train", streaming=True, trust_remote_code=True)
+        ds = load_dataset("wikimedia/wikipedia", "20231101.tr", split="train", streaming=True)
         save_dataset_to_text(ds, os.path.join(DATA_DIR, "turkish_academic.txt"), column_name="text", max_samples=20000)
     except Exception as e:
         print(f"Failed to download Turkish Wiki: {e}")
 
-    # 2. Code (The Stack Smol - Python)
+    # 2. Code (The Stack Smol)
     try:
-        print("\n[Phase 1] Downloading Python Code (bigcode/the-stack-smol)...")
-        # Modern, high-quality code dataset
-        ds = load_dataset("bigcode/the-stack-smol", "python", split="train", streaming=True, trust_remote_code=True)
+        print("\n[Phase 1] Downloading Code (bigcode/the-stack-smol)...")
+        # 'default' contains mixed code, which is fine.
+        ds = load_dataset("bigcode/the-stack-smol", "default", split="train", streaming=True)
         save_dataset_to_text(ds, os.path.join(DATA_DIR, "github_code.txt"), column_name="content", max_samples=10000)
     except Exception as e:
         print(f"Failed to download Code: {e}")
@@ -47,20 +47,20 @@ def main():
     
     try:
         print("\n[Phase 2] Downloading English (TinyStories)...")
-        # TinyStories is excellent for reasoning/world model at small scale and downloads fast
-        ds = load_dataset("roneneldan/TinyStories", split="train", streaming=True, trust_remote_code=True)
+        ds = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
         save_dataset_to_text(ds, os.path.join(DATA_DIR, "english_pile.txt"), column_name="text", max_samples=20000)
     except Exception as e:
         print(f"Failed to download English Data: {e}")
 
-    # --- PHASE 3: REASONING (Math) ---
+    # --- PHASE 3: REASONING (Math/Textbooks) ---
     
     try:
-        print("\n[Phase 3] Downloading OpenWebMath (Subset)...")
-        ds = load_dataset("openwebmath/openwebmath", split="train", streaming=True, trust_remote_code=True)
+        print("\n[Phase 3] Downloading Reasoning (Tiny Textbooks)...")
+        # Tiny Textbooks is excellent for reasoning
+        ds = load_dataset("nampdn-ai/tiny-textbooks", split="train", streaming=True)
         save_dataset_to_text(ds, os.path.join(DATA_DIR, "math_reasoning.txt"), column_name="text", max_samples=5000)
     except Exception as e:
-        print(f"Failed to download OpenWebMath: {e}")
+        print(f"Failed to download Reasoning Data: {e}")
 
     print("\nDownload Complete! Datasets are ready in 'data/' folder.")
 

@@ -1,8 +1,8 @@
 class ModelConfig:
-    vocab_size = 260    # Byte-Level (0-255) + Special Tokens
+    vocab_size = 264    # Byte-Level (0-255) + 4 Special Tokens (SILENCE, WAIT, THINK, SPEAK)
     hidden_dim = 256    # 128 -> 256 (Kapasite artışı)
-    num_layers = 6      # 4 -> 6 (Derinlik artışı)
-    dropout_rate = 0.2  # 0.1 -> 0.2 (Overfitting önlemi)
+    num_layers = 12     # Hibrit mimari için derinlik (Her 6'da bir Attention)
+    dropout_rate = 0.1  # 0.1 (Standard)
     encoder_dense_units = 128 # YENİ: Encoder dense layer boyutu
 
     # Memory Layer Configuration (Spectral-Associative Hybrid)
@@ -11,6 +11,11 @@ class ModelConfig:
     memory_interval = 2  # Insert memory layer every N spectral layers
     decay_min = 0.95  # Minimum memory decay (0=forget fast, 1=never forget)
     decay_max = 0.999  # Maximum memory decay
+
+    # Hybrid Attention
+    use_attention = True
+    attention_interval = 6
+    attention_window = 256
 
 class DataConfig:
     task_name = 'text_modeling' # 'lra_listops' or 'text_modeling'

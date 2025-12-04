@@ -90,3 +90,8 @@ To reach ASI capabilities, follow this roadmap:
 
 *   **OOM (Out of Memory)**: Reduce `--batch_size` and increase `--accum_steps` to keep the effective batch size constant.
 *   **NaN Loss**: Reduce `--lr` (Learning Rate) or increase `warmup_steps`.
+
+
+---
+
+python train.py --run_name phase1_logic --data_paths data/turkish_academic.txt,data/github_code.txt --data_weights 0.8,0.2 --seq_len 1024 --batch_size 8 --accum_steps 8

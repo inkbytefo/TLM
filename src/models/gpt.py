@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from flax import linen as nn
 from src.models.hyena_block import HyenaBlock
 from src.models.memory_layer import ResidualMemoryBlock
+from src.models.attention import SlidingWindowAttention
 
 class SpectralGPT(nn.Module):
     """
@@ -51,6 +52,30 @@ class SpectralGPT(nn.Module):
             curr_x = nn.LayerNorm()(curr_x)
             curr_x = HyenaBlock(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(curr_x, train=train)
             curr_x = residual + curr_x
+
+            # Hybrid: Add Sliding Window Attention every 6 Hyena layers
+            # We add it AFTER the 6th Hyena block (1-indexed count)
+            # layer_idx is 0-indexed, so (layer_idx + 1) % 6 == 0
+            if (layer_idx + 1) % 6 == 0:
+                residual_attn = curr_x
+                # Attention layer handles its own LayerNorm (Pre-Norm) inside or we do it here.
+                # My implementation of SlidingWindowAttention does Pre-Norm internally.
+                # But to be consistent with Hyena block usage here (Norm -> Block -> Add),
+                # let's check my implementation.
+                # My implementation: y = nn.LayerNorm()(x) -> Attention -> Dropout -> Return
+                # So it expects raw input and returns residual branch content.
+                # Wait, usually we do x + block(norm(x)).
+                # My implementation does norm(x) inside.
+                # So we just do: curr_x = curr_x + Attention(curr_x)
+                
+                attn_out = SlidingWindowAttention(
+                    hidden_dim=self.hidden_dim,
+                    num_heads=8,
+                    window_size=512, # Can be parameterized if needed
+                    dropout_rate=self.dropout_rate
+                )(curr_x, train=train)
+                
+                curr_x = curr_x + attn_out
 
             # Interleaved memory layer
             if self.use_memory and (layer_idx + 1) % self.memory_interval == 0:

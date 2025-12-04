@@ -18,7 +18,7 @@ class TrainConfig:
         self.run_name = args.run_name
         
         # Model
-        self.vocab_size = 260 # Byte-level
+        self.vocab_size = 264 # Byte-level + Special Tokens
         self.hidden_dim = args.hidden_dim
         self.num_layers = args.num_layers
         self.dropout = 0.1

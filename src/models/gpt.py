@@ -96,8 +96,6 @@ class SpectralGPT(nn.Module):
                 curr_x, new_mem_state = ResidualMemoryBlock(
                     hidden_dim=self.hidden_dim,
                     memory_dim=self.memory_dim,
-                    hidden_dim=self.hidden_dim,
-                    memory_dim=self.memory_dim,
                     dropout_rate=self.dropout_rate,
                     dtype=self.dtype
                 )(curr_x, layer_state, train=train)

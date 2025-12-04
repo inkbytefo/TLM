@@ -70,30 +70,42 @@ def create_train_state(rng, config):
     return TrainState.create(apply_fn=model.apply, params=params, tx=tx)
 
 # --- TRAINING STEP (With Gradient Accumulation) ---
+# --- TRAINING STEP (With Gradient Accumulation) ---
 @jax.jit
 def train_step(state, batch, rng):
-    # batch: [Batch, Seq]
-    # We assume batch is already shaped for accumulation if needed, 
-    # but for simplicity here we do standard step. 
-    # To do real accumulation, we'd scan over microbatches.
+    # batch: [Accum, Batch, Seq]
+    accum_steps = batch['input'].shape[0]
+    dropout_rngs = jax.random.split(rng, accum_steps)
     
-    def loss_fn(params, x, y, dropout_rng):
+    def compute_loss(params, minibatch, dropout_rng):
         logits, _ = state.apply_fn(
             {'params': params}, 
-            x, 
+            minibatch['input'], 
             train=True, 
             rngs={'dropout': dropout_rng}
         )
-        loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, minibatch['label']).mean()
         return loss, logits
 
-    dropout_rng = jax.random.fold_in(rng, state.step)
+    def scan_step(carry, x):
+        minibatch, dropout_rng = x
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        (loss, logits), grads = grad_fn(state.params, minibatch, dropout_rng)
+        return carry, (loss, grads)
+
+    # Scan over the accumulation dimension
+    # batch is a dict of arrays, so we need to transpose or slice it.
+    # Actually jax.lax.scan scans over the leading axis of the arrays in scan_inputs.
+    # So if we pass (batch, dropout_rngs), it will slice batch['input'] and batch['label'] along axis 0.
+    scan_inputs = (batch, dropout_rngs)
+    _, (losses, grads) = jax.lax.scan(scan_step, None, scan_inputs)
     
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, logits), grads = grad_fn(state.params, batch['input'], batch['label'], dropout_rng)
+    avg_loss = jnp.mean(losses)
+    # Average gradients across accumulation steps
+    avg_grads = jax.tree.map(lambda x: jnp.mean(x, axis=0), grads)
     
-    state = state.apply_gradients(grads=grads)
-    return state, loss
+    state = state.apply_gradients(grads=avg_grads)
+    return state, avg_loss
 
 # --- EXTRAPOLATION EVAL ---
 def eval_extrapolation(state, config, logger):

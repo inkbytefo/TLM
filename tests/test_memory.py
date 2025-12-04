@@ -18,6 +18,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import sys
+import os
+
+# Add parent directory to path to allow imports from src and config
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from flax.training import train_state
 from config import Config
 from src.utils.common import setup_logger, set_seed
@@ -161,7 +167,7 @@ def test_copy_ability(use_memory=False, train_steps=0):
 
             # Forward + backward
             def loss_fn(params):
-                logits = model.apply(
+                logits, _ = model.apply(
                     {'params': params},
                     batch_inputs,
                     train=True,
@@ -196,7 +202,7 @@ def test_copy_ability(use_memory=False, train_steps=0):
         batch_predictions = []
         for j in range(batch_size_i):
             single_input = batch_inputs_i[j:j+1]  # (1, seq_len)
-            logits_ij = model.apply({'params': params}, single_input, train=False)
+            logits_ij, _ = model.apply({'params': params}, single_input, train=False)
             pred_ij = jnp.argmax(logits_ij[0, -1])
             batch_predictions.append(pred_ij)
         predictions.extend(batch_predictions)

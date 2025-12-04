@@ -50,7 +50,8 @@ class SpectralGPT(nn.Module):
             # Hyena block
             residual = curr_x
             curr_x = nn.LayerNorm()(curr_x)
-            curr_x = HyenaBlock(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(curr_x, train=train)
+            # Gradient Checkpointing (Remat) to save memory
+            curr_x = nn.remat(HyenaBlock)(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(curr_x, train=train)
             curr_x = residual + curr_x
 
             # Hybrid: Add Sliding Window Attention every 6 Hyena layers
@@ -68,7 +69,7 @@ class SpectralGPT(nn.Module):
                 # My implementation does norm(x) inside.
                 # So we just do: curr_x = curr_x + Attention(curr_x)
                 
-                attn_out = SlidingWindowAttention(
+                attn_out = nn.remat(SlidingWindowAttention)(
                     hidden_dim=self.hidden_dim,
                     num_heads=8,
                     window_size=512, # Can be parameterized if needed

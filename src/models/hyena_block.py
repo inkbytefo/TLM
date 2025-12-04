@@ -79,9 +79,10 @@ class HyenaBlock(nn.Module):
         
         # Apply exponential decay window to enforce locality/stability
         # This is crucial for Hyena stability
-        t = jnp.arange(seq_len)
-        decay = jnp.exp(-0.01 * t)[:, None]
-        h = h * decay
+        # t = jnp.arange(seq_len)
+        # decay = jnp.exp(-0.01 * t)[:, None]
+        # h = h * decay
+        h = h # Decay removed for infinite context
         
         # 3. Causal Convolution
         # y = h * v (Convolution)

@@ -1,6 +1,6 @@
 class ModelConfig:
     vocab_size = 264    # Byte-Level (0-255) + 4 Special Tokens (SILENCE, WAIT, THINK, SPEAK)
-    hidden_dim = 256    # 128 -> 256 (Kapasite artışı)
+    hidden_dim = 512    # 256 -> 512 (Kapasite artışı)
     num_layers = 12     # Hibrit mimari için derinlik (Her 6'da bir Attention)
     dropout_rate = 0.1  # 0.1 (Standard)
     encoder_dense_units = 128 # YENİ: Encoder dense layer boyutu
@@ -19,8 +19,8 @@ class ModelConfig:
 
 class DataConfig:
     task_name = 'text_modeling' # 'lra_listops' or 'text_modeling'
-    seq_len = 2048      # Byte-Level için artırıldı
-    batch_size = 16     # 32 -> 16 (OOM Fix)
+    seq_len = 8192      # Byte-Level için artırıldı
+    batch_size = 4      # 16 -> 4 (OOM Fix)
     text_file_path = 'data/sonnet.txt' # Text task için dosya yolu
     imdb_seq_len = 1024 # IMDB için sequence length
 
@@ -31,8 +31,8 @@ class TextDataConfig:
 class TextGenConfig:
     """Configuration for text generation training (Shakespeare, code, etc.)"""
     dataset_path = 'data/shakespeare.txt'
-    seq_len = 1024
-    batch_size = 8  # Smaller batch for gradient accumulation (8 * 8 = 64 effective)
+    seq_len = 8192
+    batch_size = 4  # Smaller batch for gradient accumulation (8 * 8 = 64 effective)
     num_steps = 5000
     eval_every = 200
     sample_every = 200  # Generate sample text every N steps

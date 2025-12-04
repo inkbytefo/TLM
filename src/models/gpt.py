@@ -51,8 +51,9 @@ class SpectralGPT(nn.Module):
             residual = curr_x
             curr_x = nn.LayerNorm()(curr_x)
             # Gradient Checkpointing (Remat) to save memory
-            # We must mark 'train' as static because it's used in boolean context (Dropout)
-            curr_x = nn.remat(HyenaBlock, static_argnames=('train',))(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(curr_x, train=train)
+            # We use static_argnums=(2,) because 'train' appears to be the 3rd argument (index 2)
+            # likely due to (self/scope, x, train) signature in the traced function.
+            curr_x = nn.remat(HyenaBlock, static_argnums=(2,))(hidden_dim=self.hidden_dim, dropout_rate=self.dropout_rate)(curr_x, train)
             curr_x = residual + curr_x
 
             # Hybrid: Add Sliding Window Attention every 6 Hyena layers
@@ -70,12 +71,12 @@ class SpectralGPT(nn.Module):
                 # My implementation does norm(x) inside.
                 # So we just do: curr_x = curr_x + Attention(curr_x)
                 
-                attn_out = nn.remat(SlidingWindowAttention, static_argnames=('train',))(
+                attn_out = nn.remat(SlidingWindowAttention, static_argnums=(2,))(
                     hidden_dim=self.hidden_dim,
                     num_heads=8,
                     window_size=512, # Can be parameterized if needed
                     dropout_rate=self.dropout_rate
-                )(curr_x, train=train)
+                )(curr_x, train)
                 
                 curr_x = curr_x + attn_out
 

@@ -36,7 +36,7 @@ class TrainConfig:
         self.data_weights = [float(w) for w in args.data_weights.split(',')]
         
         # Checkpointing
-        self.ckpt_dir = os.path.join("checkpoints", self.run_name)
+        self.ckpt_dir = os.path.abspath(os.path.join("checkpoints", self.run_name))
 
 # --- TRAIN STATE ---
 class TrainState(train_state.TrainState):
@@ -202,7 +202,7 @@ def main():
             wandb.log({"train_loss": float(loss), "step": step})
             logger.info(f"Step {step} | Loss: {float(loss):.4f}")
             
-        if step % 1000 == 0:
+        if step % 1 == 0:
             # Save Checkpoint
             checkpoints.save_checkpoint(config.ckpt_dir, state, step, keep=2, overwrite=True)
             

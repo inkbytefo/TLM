@@ -205,7 +205,7 @@ def main():
             wandb.log({"train_loss": float(loss), "step": step})
             logger.info(f"Step {step} | Loss: {float(loss):.4f}")
             
-        if step % 1 == 0:
+        if step % 500 == 0:
             # Save Checkpoint
             checkpoints.save_checkpoint(config.ckpt_dir, state, step, keep=2, overwrite=True)
             

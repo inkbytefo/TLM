@@ -25,39 +25,39 @@ def main():
 
     # --- PHASE 1: MORPHOLOGY & LOGIC (Turkish + Code) ---
     
-    # 1. Turkish Academic (Using Wikipedia as proxy for high-quality text if academic is restricted, 
-    # but let's try a subset of a good Turkish corpus)
-    # Using 'wikipedia' (tr) for general high quality, and 'fthbrmnby/turkish_product_reviews' for colloquial
+    # 1. Turkish Academic (Wikimedia/Wikipedia)
     try:
-        print("\n[Phase 1] Downloading Turkish Wikipedia (Subset)...")
-        ds = load_dataset("wikipedia", "20220301.tr", split="train", streaming=True)
+        print("\n[Phase 1] Downloading Turkish Wikipedia (wikimedia/wikipedia)...")
+        # New standard wikipedia dataset
+        ds = load_dataset("wikimedia/wikipedia", "20231101.tr", split="train", streaming=True, trust_remote_code=True)
         save_dataset_to_text(ds, os.path.join(DATA_DIR, "turkish_academic.txt"), column_name="text", max_samples=20000)
     except Exception as e:
         print(f"Failed to download Turkish Wiki: {e}")
 
-    # 2. Code (Python)
+    # 2. Code (The Stack Smol - Python)
     try:
-        print("\n[Phase 1] Downloading Python Code (The Stack/CodeSearchNet subset)...")
-        # Using a smaller, accessible code dataset
-        ds = load_dataset("code_search_net", "python", split="train", streaming=True)
-        save_dataset_to_text(ds, os.path.join(DATA_DIR, "github_code.txt"), column_name="whole_func_string", max_samples=10000)
+        print("\n[Phase 1] Downloading Python Code (bigcode/the-stack-smol)...")
+        # Modern, high-quality code dataset
+        ds = load_dataset("bigcode/the-stack-smol", "python", split="train", streaming=True, trust_remote_code=True)
+        save_dataset_to_text(ds, os.path.join(DATA_DIR, "github_code.txt"), column_name="content", max_samples=10000)
     except Exception as e:
         print(f"Failed to download Code: {e}")
 
     # --- PHASE 2: WORLD KNOWLEDGE (English) ---
     
     try:
-        print("\n[Phase 2] Downloading English WikiText-103...")
-        ds = load_dataset("wikitext", "wikitext-103-v1", split="train", streaming=True)
+        print("\n[Phase 2] Downloading English (TinyStories)...")
+        # TinyStories is excellent for reasoning/world model at small scale and downloads fast
+        ds = load_dataset("roneneldan/TinyStories", split="train", streaming=True, trust_remote_code=True)
         save_dataset_to_text(ds, os.path.join(DATA_DIR, "english_pile.txt"), column_name="text", max_samples=20000)
     except Exception as e:
-        print(f"Failed to download WikiText: {e}")
+        print(f"Failed to download English Data: {e}")
 
     # --- PHASE 3: REASONING (Math) ---
     
     try:
         print("\n[Phase 3] Downloading OpenWebMath (Subset)...")
-        ds = load_dataset("openwebmath/openwebmath", split="train", streaming=True)
+        ds = load_dataset("openwebmath/openwebmath", split="train", streaming=True, trust_remote_code=True)
         save_dataset_to_text(ds, os.path.join(DATA_DIR, "math_reasoning.txt"), column_name="text", max_samples=5000)
     except Exception as e:
         print(f"Failed to download OpenWebMath: {e}")

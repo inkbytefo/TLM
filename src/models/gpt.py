@@ -13,7 +13,6 @@ class SpectralGPT(nn.Module):
     hidden_dim: int = 512
     num_layers: int = 6
     dropout_rate: float = 0.1
-    max_len: int = 2048
     use_memory: bool = False
     memory_dim: int = 64
     memory_interval: int = 2
@@ -25,12 +24,16 @@ class SpectralGPT(nn.Module):
         # 1. Embedding
         x_emb = nn.Embed(num_embeddings=self.vocab_size, features=self.hidden_dim)(x)
         
-        # 2. Positional Encoding
-        seq_len = x.shape[1]
-        pe = self.param('pe', nn.initializers.normal(0.02), (1, self.max_len, self.hidden_dim))
-        pe_slice = pe[:, :seq_len, :]
+        # 2. Positional Encoding (Dynamic / Infinite)
+        # We use the same Sinusoidal PE as in HyenaBlock for consistency and extrapolation
+        from src.models.hyena_block import PositionalEmbedding
         
-        x_emb = x_emb + pe_slice
+        seq_len = x.shape[1]
+        # Generate PE for current length
+        pe = PositionalEmbedding(emb_dim=self.hidden_dim)(seq_len) # (Seq, Hidden)
+        
+        # Add to embeddings (Broadcast batch dim)
+        x_emb = x_emb + pe[None, :, :]
         x_emb = nn.Dropout(rate=self.dropout_rate)(x_emb, deterministic=not train)
         
         # 3. Hybrid Hyena-Memory Blocks

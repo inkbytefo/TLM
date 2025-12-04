@@ -3,36 +3,7 @@ import jax.numpy as jnp
 from flax.training import train_state
 import optax
 import functools
-from src.models.model import SpectralModel
 from src.models.gpt import SpectralGPT
-
-def create_train_state(rng, config):
-    model = SpectralModel(
-        vocab_size=config.model.vocab_size,
-        hidden_dim=config.model.hidden_dim,
-        num_layers=config.model.num_layers,
-        dropout_rate=config.model.dropout_rate,
-        num_classes=10
-    )
-    
-    dummy_input = jnp.ones((1, config.data.seq_len), dtype=jnp.int32)
-    params = model.init(rng, dummy_input, train=False)['params']
-    
-    schedule = optax.warmup_cosine_decay_schedule(
-        init_value=1e-5,
-        peak_value=config.training.learning_rate,
-        warmup_steps=config.training.warmup_steps,
-        decay_steps=config.training.num_steps
-    )
-    
-    tx = optax.chain(
-        optax.clip_by_global_norm(config.training.gradient_clip_value),
-        optax.adamw(learning_rate=schedule, weight_decay=config.training.weight_decay)
-    )
-    
-    return train_state.TrainState.create(
-        apply_fn=model.apply, params=params, tx=tx
-    )
 
 def create_generative_train_state(rng, config):
     use_memory = getattr(config.model, 'use_memory', False)

@@ -1,0 +1,84 @@
+_wandb:
+    value:
+        cli_version: 0.21.1
+        e:
+            9z6ocy1qahdq8rs310uaookwvdwuhvup:
+                args:
+                    - --run_name
+                    - dry_run
+                    - --steps
+                    - "1"
+                    - --batch_size
+                    - "2"
+                    - --seq_len
+                    - "128"
+                codePath: train.py
+                codePathLocal: train.py
+                cpu_count: 4
+                cpu_count_logical: 8
+                disk:
+                    /:
+                        total: "499150483456"
+                        used: "431162290176"
+                email: inkbytefo@gmail.com
+                executable: C:\Users\tpoyr\AppData\Local\Programs\Python\Python311\python.exe
+                git:
+                    commit: fe2c0d87db2483f198aa806dd469835f92f1b194
+                    remote: https://github.com/inkbytefo/TLM.git
+                host: Inkbytefo
+                memory:
+                    total: "25691713536"
+                os: Windows-10-10.0.26200-SP0
+                program: C:\Users\tpoyr\OneDrive\Desktop\TLM\train.py
+                python: CPython 3.11.0
+                root: C:\Users\tpoyr\OneDrive\Desktop\TLM
+                startedAt: "2025-12-04T19:52:17.842185Z"
+                writerId: 9z6ocy1qahdq8rs310uaookwvdwuhvup
+        m: []
+        python_version: 3.11.0
+        t:
+            "1":
+                - 2
+                - 3
+                - 5
+                - 12
+                - 45
+                - 49
+                - 53
+                - 105
+            "2":
+                - 2
+                - 3
+                - 5
+                - 12
+                - 45
+                - 49
+                - 53
+                - 105
+            "3":
+                - 13
+                - 16
+            "4": 3.11.0
+            "5": 0.21.1
+            "8":
+                - 3
+            "12": 0.21.1
+            "13": windows-amd64
+accum_steps:
+    value: 8
+batch_size:
+    value: 2
+data_path:
+    value: data/tinystories.txt
+hidden_dim:
+    value: 256
+lr:
+    value: 0.0003
+num_layers:
+    value: 6
+run_name:
+    value: dry_run
+seq_len:
+    value: 128
+steps:
+    value: 1

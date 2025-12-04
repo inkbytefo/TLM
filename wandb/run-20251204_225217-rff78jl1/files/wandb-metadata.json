@@ -1,0 +1,38 @@
+{
+  "os":  "Windows-10-10.0.26200-SP0",
+  "python":  "CPython 3.11.0",
+  "startedAt":  "2025-12-04T19:52:17.842185Z",
+  "args":  [
+    "--run_name",
+    "dry_run",
+    "--steps",
+    "1",
+    "--batch_size",
+    "2",
+    "--seq_len",
+    "128"
+  ],
+  "program":  "C:\\Users\\tpoyr\\OneDrive\\Desktop\\TLM\\train.py",
+  "codePath":  "train.py",
+  "codePathLocal":  "train.py",
+  "git":  {
+    "remote":  "https://github.com/inkbytefo/TLM.git",
+    "commit":  "fe2c0d87db2483f198aa806dd469835f92f1b194"
+  },
+  "email":  "inkbytefo@gmail.com",
+  "root":  "C:\\Users\\tpoyr\\OneDrive\\Desktop\\TLM",
+  "host":  "Inkbytefo",
+  "executable":  "C:\\Users\\tpoyr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+  "cpu_count":  4,
+  "cpu_count_logical":  8,
+  "disk":  {
+    "/":  {
+      "total":  "499150483456",
+      "used":  "431162290176"
+    }
+  },
+  "memory":  {
+    "total":  "25691713536"
+  },
+  "writerId":  "9z6ocy1qahdq8rs310uaookwvdwuhvup"
+}

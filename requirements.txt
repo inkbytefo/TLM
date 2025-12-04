@@ -1,5 +1,5 @@
 ## Developer: inkbytefo
-## Modified: 2025-12-01
+## Modified: 2025-12-04
 jax
 jaxlib
 flax
@@ -12,3 +12,6 @@ tensorflow-datasets
 fastapi
 uvicorn
 websockets
+wandb
+datasets
+tqdm

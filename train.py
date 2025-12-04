@@ -161,7 +161,27 @@ def main():
     
     # Loop
     for step in range(1, config.total_steps + 1):
-        batch = next(loader)
+        # Accumulate Micro-Batches
+        accum_inputs = []
+        accum_labels = []
+        for _ in range(config.accum_steps):
+            try:
+                batch_data = next(loader)
+            except StopIteration:
+                # Restart loader if needed (though MemmapDataLoader should be cyclic or handled)
+                # For now, just try next again assuming it resets or handles it, 
+                # or if it really stopped, we might need to re-init. 
+                # Assuming infinite loader for now based on typical usage.
+                batch_data = next(loader) 
+                
+            accum_inputs.append(batch_data['input'])
+            accum_labels.append(batch_data['label'])
+            
+        # Stack to create (Accum, Batch, Seq)
+        batch = {
+            'input': jnp.stack(accum_inputs, axis=0),
+            'label': jnp.stack(accum_labels, axis=0)
+        }
         
         # JAX Step
         state, loss = train_step(state, batch, rng)

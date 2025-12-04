@@ -58,35 +58,6 @@ class AgentLoop:
         self.memory_state = None 
         self.silence_counter = 0
         
-        self.logger.info("Agent initialized and ready.")
-
-    def step(self, input_token: int) -> int:
-        """Run one step of the agent loop."""
-        # Prepare input
-        input_seq = jnp.array([[input_token]], dtype=jnp.int32) # (1, 1)
-        
-        self.rng, step_rng = jax.random.split(self.rng)
-        
-        # Forward pass
-        # FIX: Use 'init_memory_state' to match model definition
-        logits, new_memory_state = self.state.apply_fn(
-            {'params': self.state.params},
-            input_seq,
-            init_memory_state=self.memory_state,
-            train=False
-        )
-        
-        # Update memory state
-        self.memory_state = new_memory_state
-        
-        # Sampling
-        next_token_logits = logits[0, -1, :] / self.config.agent.temperature
-        next_token = int(jax.random.categorical(step_rng, next_token_logits))
-        
-        return next_token
-
-    def run(self):
-        print("\n=== Autonomous Agent Loop Started ===")
         print("Type something and press Enter. The agent is listening...")
         print("(Press Ctrl+C to exit)\n")
         

@@ -1,11 +1,13 @@
 import jax
 import jax.numpy as jnp
+from typing import Any
 from flax import linen as nn
 from src.models.causal_utils import causal_fft_conv
 
 class PositionalEmbedding(nn.Module):
     """Sinusoidal Positional Embedding for the Filter Network"""
     emb_dim: int
+    dtype: Any = jnp.float32
 
     @nn.compact
     def __call__(self, seq_len):
@@ -17,7 +19,7 @@ class PositionalEmbedding(nn.Module):
         div_term = jnp.exp(jnp.arange(0, self.emb_dim, 2) * -(jnp.log(10000.0) / self.emb_dim))
         
         # Calculate sine and cosine components
-        pe = jnp.zeros((seq_len, self.emb_dim))
+        pe = jnp.zeros((seq_len, self.emb_dim), dtype=self.dtype)
         pe = pe.at[:, 0::2].set(jnp.sin(positions * div_term))
         pe = pe.at[:, 1::2].set(jnp.cos(positions * div_term))
         
@@ -31,17 +33,18 @@ class FilterNetwork(nn.Module):
     """
     hidden_dim: int
     output_dim: int
+    dtype: Any = jnp.float32
     
     @nn.compact
     def __call__(self, positions_emb):
         # positions_emb: (Seq, Emb_Dim)
         
         # Simple MLP: Pos -> Dense -> Act -> Dense -> Act -> Dense -> Filter
-        x = nn.Dense(self.hidden_dim)(positions_emb)
+        x = nn.Dense(self.hidden_dim, dtype=self.dtype)(positions_emb)
         x = nn.gelu(x)
-        x = nn.Dense(self.hidden_dim)(x)
+        x = nn.Dense(self.hidden_dim, dtype=self.dtype)(x)
         x = nn.gelu(x)
-        x = nn.Dense(self.output_dim)(x) # (Seq, Output_Dim)
+        x = nn.Dense(self.output_dim, dtype=self.dtype)(x) # (Seq, Output_Dim)
         
         return x
 
@@ -55,6 +58,7 @@ class HyenaBlock(nn.Module):
     hidden_dim: int
     filter_order: int = 64 # Dimension of the positional embedding for the filter
     dropout_rate: float = 0.1
+    dtype: Any = jnp.float32
     
     @nn.compact
     def __call__(self, x, train: bool = True):
@@ -62,20 +66,20 @@ class HyenaBlock(nn.Module):
         seq_len = x.shape[1]
         
         # 1. Projections
-        u = nn.Dense(self.hidden_dim)(x)
-        v = nn.Dense(self.hidden_dim)(x)
+        u = nn.Dense(self.hidden_dim, dtype=self.dtype)(x)
+        v = nn.Dense(self.hidden_dim, dtype=self.dtype)(x)
         
         # 2. Implicit Neural Filter Generation
         # Instead of learning a fixed tensor h[max_len], we generate h(t)
         
         # A. Generate Positional Embeddings for current length
         # We use a small embedding dimension for the filter network (e.g., 64)
-        pos_emb = PositionalEmbedding(emb_dim=self.filter_order)(seq_len) # (Seq, Filter_Order)
+        pos_emb = PositionalEmbedding(emb_dim=self.filter_order, dtype=self.dtype)(seq_len) # (Seq, Filter_Order)
         
         # B. Pass through MLP to get the filter
         # The filter needs to be (Seq, Hidden) to convolve with v (Seq, Hidden)
         # We initialize the MLP to output small values to start
-        h = FilterNetwork(hidden_dim=64, output_dim=self.hidden_dim)(pos_emb)
+        h = FilterNetwork(hidden_dim=64, output_dim=self.hidden_dim, dtype=self.dtype)(pos_emb)
         
         # Apply exponential decay window to enforce locality/stability
         # This is crucial for Hyena stability
@@ -93,7 +97,8 @@ class HyenaBlock(nn.Module):
         y = u * v_conv
         
         # 5. Output Projection
-        y = nn.Dense(self.hidden_dim)(y)
+        # 5. Output Projection
+        y = nn.Dense(self.hidden_dim, dtype=self.dtype)(y)
         y = nn.Dropout(rate=self.dropout_rate)(y, deterministic=not train)
         
         return y

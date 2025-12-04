@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from typing import Any
 from flax import linen as nn
 
 class SlidingWindowAttention(nn.Module):
@@ -11,6 +12,7 @@ class SlidingWindowAttention(nn.Module):
     num_heads: int = 8
     window_size: int = 512
     dropout_rate: float = 0.1
+    dtype: Any = jnp.float32
 
     @nn.compact
     def __call__(self, x, train: bool = True):
@@ -40,7 +42,7 @@ class SlidingWindowAttention(nn.Module):
         mask_bias = mask_bias[None, None, :, :]
         
         # Layer Norm before Attention (Pre-Norm)
-        y = nn.LayerNorm()(x)
+        y = nn.LayerNorm(dtype=self.dtype)(x)
         
         # Multi-Head Attention
         # Flax's MultiHeadAttention expects inputs_q, inputs_kv
@@ -50,7 +52,8 @@ class SlidingWindowAttention(nn.Module):
             qkv_features=self.hidden_dim,
             out_features=self.hidden_dim,
             dropout_rate=self.dropout_rate,
-            broadcast_dropout=False
+            broadcast_dropout=False,
+            dtype=self.dtype
         )(inputs_q=y, inputs_kv=y, mask=mask_bias, deterministic=not train)
         
         # Dropout

@@ -30,6 +30,7 @@ class TrainConfig:
         self.learning_rate = args.lr
         self.total_steps = args.steps
         self.warmup_steps = int(args.steps * 0.05)
+        self.dtype = jnp.bfloat16 if args.dtype == 'bfloat16' else jnp.float32
         
         # Data
         self.data_paths = args.data_paths.split(',')
@@ -49,7 +50,8 @@ def create_train_state(rng, config):
         hidden_dim=config.hidden_dim,
         num_layers=config.num_layers,
         dropout_rate=config.dropout,
-        use_memory=True
+        use_memory=True,
+        dtype=config.dtype
     )
     
     dummy_input = jnp.ones((1, config.seq_len), dtype=jnp.int32)
@@ -143,6 +145,7 @@ def main():
     parser.add_argument("--accum_steps", type=int, default=8)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--steps", type=int, default=50000)
+    parser.add_argument("--dtype", type=str, default="bfloat16", choices=["float32", "bfloat16"], help="Data type for training")
     args = parser.parse_args()
     
     config = TrainConfig(args)

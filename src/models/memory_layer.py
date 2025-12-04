@@ -8,7 +8,7 @@ Modified: Increased initialization scale and beta range for faster convergence.
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 
 
 class DeltaMemoryLayer(nn.Module):
@@ -28,18 +28,21 @@ class DeltaMemoryLayer(nn.Module):
     hidden_dim: int
     memory_dim: int = 64
     dropout_rate: float = 0.1
+    dtype: Any = jnp.float32
     beta_min: float = 0.01
     beta_max: float = 0.5    # Stabilite için düşürüldü
 
     def setup(self):
         """Initialize learnable parameters."""
         # Query, Key, Value projections
-        self.W_q = nn.Dense(self.memory_dim, use_bias=False, name='query_proj')
-        self.W_k = nn.Dense(self.memory_dim, use_bias=False, name='key_proj')
-        self.W_v = nn.Dense(self.memory_dim, use_bias=False, name='value_proj')
+        # Query, Key, Value projections
+        self.W_q = nn.Dense(self.memory_dim, use_bias=False, name='query_proj', dtype=self.dtype)
+        self.W_k = nn.Dense(self.memory_dim, use_bias=False, name='key_proj', dtype=self.dtype)
+        self.W_v = nn.Dense(self.memory_dim, use_bias=False, name='value_proj', dtype=self.dtype)
 
         # Output projection with learnable scale for residual balancing
-        self.W_o = nn.Dense(self.hidden_dim, use_bias=True, name='output_proj')
+        # Output projection with learnable scale for residual balancing
+        self.W_o = nn.Dense(self.hidden_dim, use_bias=True, name='output_proj', dtype=self.dtype)
 
         # Learnable scale for memory contribution
         # CRITICAL FIX: Init 1.0 to ensure gradients flow to memory params
@@ -263,6 +266,7 @@ class ResidualMemoryBlock(nn.Module):
     hidden_dim: int
     memory_dim: int = 64
     dropout_rate: float = 0.1
+    dtype: Any = jnp.float32
 
     @nn.compact
     def __call__(
@@ -284,13 +288,14 @@ class ResidualMemoryBlock(nn.Module):
             final_memory_state: Updated memory state
         """
         # Layer norm before memory
-        normed_x = nn.LayerNorm()(x)
+        normed_x = nn.LayerNorm(dtype=self.dtype)(x)
 
         # Delta Memory Layer
         memory_layer = DeltaMemoryLayer(
             hidden_dim=self.hidden_dim,
             memory_dim=self.memory_dim,
-            dropout_rate=self.dropout_rate
+            dropout_rate=self.dropout_rate,
+            dtype=self.dtype
         )
         memory_output, final_memory_state = memory_layer(normed_x, memory_state, train)
 

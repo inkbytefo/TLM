@@ -1,71 +1,62 @@
 import os
+import gc
 from datasets import load_dataset
 from tqdm import tqdm
 
 DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
-def save_dataset_to_text(dataset, output_path, column_name="text", max_samples=10000):
-    """Saves a Hugging Face dataset to a text file."""
-    print(f"Saving {max_samples} samples to {output_path}...")
-    
-    # Use take() to safely limit the number of samples from the streaming dataset
-    # This helps avoid issues with background threads when breaking manually
-    dataset_head = dataset.take(max_samples)
-    
-    with open(output_path, "w", encoding="utf-8") as f:
+def download_and_save(dataset_name, config_name, output_filename, max_samples, column_name="text"):
+    """Downloads and saves a dataset with explicit cleanup."""
+    try:
+        print(f"\nDownloading {dataset_name} ({config_name if config_name else 'default'})...")
+        # Load dataset
+        if config_name:
+            ds = load_dataset(dataset_name, config_name, split="train", streaming=True)
+        else:
+            ds = load_dataset(dataset_name, split="train", streaming=True)
+            
+        # Take samples
+        ds_head = ds.take(max_samples)
+        
+        output_path = os.path.join(DATA_DIR, output_filename)
+        print(f"Saving to {output_path}...")
+        
         count = 0
-        for sample in tqdm(dataset_head, total=max_samples):
-            text = sample.get(column_name, "")
-            if text:
-                f.write(text + "\n<|endoftext|>\n")
-                count += 1
-                
-    print(f"Saved {count} samples.")
+        with open(output_path, "w", encoding="utf-8") as f:
+            for sample in tqdm(ds_head, total=max_samples):
+                text = sample.get(column_name, "")
+                if text:
+                    f.write(text + "\n<|endoftext|>\n")
+                    count += 1
+        
+        print(f"Saved {count} samples.")
+        
+        # Explicit cleanup to avoid threading issues at exit
+        del ds_head
+        del ds
+        gc.collect()
+        
+    except Exception as e:
+        print(f"Failed to download {dataset_name}: {e}")
 
 def main():
     print("Downloading ASI Curriculum Datasets...")
 
-    # --- PHASE 1: MORPHOLOGY & LOGIC (Turkish + Code) ---
-    
-    # 1. Turkish Academic (Wikimedia/Wikipedia)
-    try:
-        print("\n[Phase 1] Downloading Turkish Wikipedia (wikimedia/wikipedia)...")
-        # New standard wikipedia dataset
-        ds = load_dataset("wikimedia/wikipedia", "20231101.tr", split="train", streaming=True)
-        save_dataset_to_text(ds, os.path.join(DATA_DIR, "turkish_academic.txt"), column_name="text", max_samples=20000)
-    except Exception as e:
-        print(f"Failed to download Turkish Wiki: {e}")
+    # --- PHASE 1: MORPHOLOGY & LOGIC ---
+    download_and_save("wikimedia/wikipedia", "20231101.tr", "turkish_academic.txt", 20000, "text")
+    download_and_save("bigcode/the-stack-smol", "default", "github_code.txt", 10000, "content")
 
-    # 2. Code (The Stack Smol)
-    try:
-        print("\n[Phase 1] Downloading Code (bigcode/the-stack-smol)...")
-        # 'default' contains mixed code, which is fine.
-        ds = load_dataset("bigcode/the-stack-smol", "default", split="train", streaming=True)
-        save_dataset_to_text(ds, os.path.join(DATA_DIR, "github_code.txt"), column_name="content", max_samples=10000)
-    except Exception as e:
-        print(f"Failed to download Code: {e}")
+    # --- PHASE 2: WORLD KNOWLEDGE ---
+    download_and_save("roneneldan/TinyStories", None, "english_pile.txt", 20000, "text")
 
-    # --- PHASE 2: WORLD KNOWLEDGE (English) ---
-    
-    try:
-        print("\n[Phase 2] Downloading English (TinyStories)...")
-        ds = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
-        save_dataset_to_text(ds, os.path.join(DATA_DIR, "english_pile.txt"), column_name="text", max_samples=20000)
-    except Exception as e:
-        print(f"Failed to download English Data: {e}")
-
-    # --- PHASE 3: REASONING (Math/Textbooks) ---
-    
-    try:
-        print("\n[Phase 3] Downloading Reasoning (Tiny Textbooks)...")
-        # Tiny Textbooks is excellent for reasoning
-        ds = load_dataset("nampdn-ai/tiny-textbooks", split="train", streaming=True)
-        save_dataset_to_text(ds, os.path.join(DATA_DIR, "math_reasoning.txt"), column_name="text", max_samples=5000)
-    except Exception as e:
-        print(f"Failed to download Reasoning Data: {e}")
+    # --- PHASE 3: REASONING ---
+    download_and_save("nampdn-ai/tiny-textbooks", None, "math_reasoning.txt", 5000, "text")
 
     print("\nDownload Complete! Datasets are ready in 'data/' folder.")
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()

@@ -9,15 +9,18 @@ def save_dataset_to_text(dataset, output_path, column_name="text", max_samples=1
     """Saves a Hugging Face dataset to a text file."""
     print(f"Saving {max_samples} samples to {output_path}...")
     
+    # Use take() to safely limit the number of samples from the streaming dataset
+    # This helps avoid issues with background threads when breaking manually
+    dataset_head = dataset.take(max_samples)
+    
     with open(output_path, "w", encoding="utf-8") as f:
         count = 0
-        for sample in tqdm(dataset):
+        for sample in tqdm(dataset_head, total=max_samples):
             text = sample.get(column_name, "")
             if text:
                 f.write(text + "\n<|endoftext|>\n")
                 count += 1
-                if count >= max_samples:
-                    break
+                
     print(f"Saved {count} samples.")
 
 def main():

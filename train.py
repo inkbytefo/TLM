@@ -30,7 +30,9 @@ class TrainConfig:
         self.learning_rate = args.lr
         self.total_steps = args.steps
         self.warmup_steps = int(args.steps * 0.05)
+        self.warmup_steps = int(args.steps * 0.05)
         self.dtype = jnp.bfloat16 if args.dtype == 'bfloat16' else jnp.float32
+        self.save_every = args.save_every
         
         # Data
         self.data_paths = args.data_paths.split(',')
@@ -146,6 +148,7 @@ def main():
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--steps", type=int, default=50000)
     parser.add_argument("--dtype", type=str, default="bfloat16", choices=["float32", "bfloat16"], help="Data type for training")
+    parser.add_argument("--save_every", type=int, default=500, help="Save checkpoint every N steps")
     args = parser.parse_args()
     
     config = TrainConfig(args)
@@ -211,8 +214,9 @@ def main():
             wandb.log({"train_loss": float(loss), "step": step})
             logger.info(f"Step {step} | Loss: {float(loss):.4f}")
             
-        if step % 500 == 0:
+        if step % config.save_every == 0:
             # Save Checkpoint
+            print(f"DEBUG: Saving checkpoint at step {step}")
             checkpoints.save_checkpoint(config.ckpt_dir, state, step, keep=2, overwrite=True)
             
             # Extrapolation Test

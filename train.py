@@ -175,18 +175,22 @@ def main():
     logger.info(f"Starting training for {config.total_steps} steps...")
     
     # Loop
+    print("DEBUG: Entering training loop")
     for step in range(1, config.total_steps + 1):
         # Accumulate Micro-Batches
         accum_inputs = []
         accum_labels = []
-        for _ in range(config.accum_steps):
+        print(f"DEBUG: Step {step} - Starting accumulation")
+        for i in range(config.accum_steps):
             try:
+                # print(f"DEBUG: Loading micro-batch {i+1}/{config.accum_steps}")
                 batch_data = next(loader)
             except StopIteration:
                 # Restart loader if needed (though MemmapDataLoader should be cyclic or handled)
                 # For now, just try next again assuming it resets or handles it, 
                 # or if it really stopped, we might need to re-init. 
                 # Assuming infinite loader for now based on typical usage.
+                print("DEBUG: StopIteration encountered, retrying")
                 batch_data = next(loader) 
                 
             accum_inputs.append(batch_data['input'])
@@ -199,7 +203,9 @@ def main():
         }
         
         # JAX Step
+        print(f"DEBUG: Step {step} - Running JAX train_step")
         state, loss = train_step(state, batch, rng)
+        print(f"DEBUG: Step {step} - JAX train_step completed")
         
         if step % 100 == 0:
             wandb.log({"train_loss": float(loss), "step": step})
